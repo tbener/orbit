@@ -1,5 +1,9 @@
 # Orbit (smart-dialer)
 
+## Docs
+- Product spec and build plan: `docs/SPEC.md` (read it before starting any stage; we build one stage at a time).
+- Home screen mockup: `docs/design/home-mockup.png`.
+
 ## App context
 Orbit is a personal Android smart dialer. Contacts are shown as priority-ranked bubbles. The app reads the call log, sends signals plus user rules to an LLM API, and gets back a ranked list with short reasons. A small deterministic layer enforces hard rules (pin a contact to a slot, never show a contact) after the LLM answers. Rules are stored locally in two separate lists: free-text rules and typed rules. Personal use, not a public release.
 
