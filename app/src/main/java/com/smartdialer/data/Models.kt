@@ -3,6 +3,7 @@ package com.smartdialer.data
 data class Contact(
     val id: String,
     val name: String,
+    val photoUri: String? = null,
 )
 
 enum class SuggestionBadge { MissedCall }
@@ -15,7 +16,18 @@ data class Suggestion(
     val reason: String,
 )
 
-data class SuggestionPage(
-    val items: List<Suggestion>,
-    val hasMore: Boolean,
+/** A contact as stored on the device, with every phone number it has. */
+data class DeviceContact(
+    val contact: Contact,
+    val numbers: List<String>,
+)
+
+enum class CallKind { Incoming, Outgoing, Missed, Other }
+
+/** One entry from the device call log. */
+data class CallRecord(
+    val number: String,
+    val kind: CallKind,
+    val timestampMillis: Long,
+    val durationSeconds: Long,
 )

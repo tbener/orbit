@@ -2,17 +2,20 @@ package com.smartdialer.data
 
 import kotlinx.coroutines.flow.StateFlow
 
-/** Source of priority-ranked suggestions. Stage 1 uses a fake; real data replaces it later. */
-interface SuggestionsRepository {
-    /** True while a background refresh of the suggestions is running. */
-    val isRefreshing: StateFlow<Boolean>
+/** The most suggestions the home screen will ever show. */
+const val MAX_SUGGESTIONS = 20
 
-    /** Returns up to [limit] suggestions in priority order, starting at [offset]. */
-    suspend fun getSuggestions(offset: Int, limit: Int): SuggestionPage
+/** Source of priority-ranked suggestions. */
+interface SuggestionsRepository {
+    /** The full ranked list (at most [MAX_SUGGESTIONS]), re-emitted whenever a refresh finishes. */
+    val suggestions: StateFlow<List<Suggestion>>
+
+    /** True while a refresh of the suggestions is running. */
+    val isRefreshing: StateFlow<Boolean>
 
     /** Searches all contacts, not only the suggested ones. */
     suspend fun searchContacts(query: String): List<Contact>
 
-    /** Refreshes the ranking in the background. */
+    /** Recomputes the ranking. Safe to call when permissions are missing; it then yields no suggestions. */
     suspend fun refresh()
 }

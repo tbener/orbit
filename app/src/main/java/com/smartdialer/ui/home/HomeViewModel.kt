@@ -8,70 +8,90 @@ import com.smartdialer.data.SuggestionsRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class HomeUiState(
+    /** The part of the ranked list currently shown; grows as the user scrolls. */
     val suggestions: List<Suggestion> = emptyList(),
     val selectedId: String? = null,
     val isRefreshing: Boolean = false,
-    val isLoadingMore: Boolean = false,
-    val canLoadMore: Boolean = true,
+    val canLoadMore: Boolean = false,
     val query: String = "",
     val searchResults: List<Contact> = emptyList(),
 )
 
 class HomeViewModel(private val repository: SuggestionsRepository) : ViewModel() {
 
-    private val _state = MutableStateFlow(HomeUiState())
-    val state: StateFlow<HomeUiState> = _state.asStateFlow()
+    private data class Local(
+        val selectedId: String? = null,
+        val query: String = "",
+        val searchResults: List<Contact> = emptyList(),
+    )
 
+    private val visibleCount = MutableStateFlow(PAGE_SIZE)
+    private val local = MutableStateFlow(Local())
     private var searchJob: Job? = null
+    private var accessGranted = false
+    private var lastRefreshMillis = 0L
 
-    init {
-        viewModelScope.launch {
-            repository.isRefreshing.collect { refreshing ->
-                _state.update { it.copy(isRefreshing = refreshing) }
-            }
-        }
-        loadMore()
+    val state: StateFlow<HomeUiState> = combine(
+        repository.suggestions,
+        repository.isRefreshing,
+        visibleCount,
+        local,
+    ) { all, refreshing, count, local ->
+        val visible = all.take(count)
+        HomeUiState(
+            suggestions = visible,
+            selectedId = local.selectedId?.takeIf { id -> visible.any { it.contact.id == id } }
+                ?: visible.firstOrNull()?.contact?.id,
+            isRefreshing = refreshing,
+            canLoadMore = count < all.size,
+            query = local.query,
+            searchResults = local.searchResults,
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+
+    /** Called when the contacts and call log permissions are granted or revoked. */
+    fun onAccessChanged(granted: Boolean) {
+        accessGranted = granted
+        if (granted) refresh()
+    }
+
+    /** Called when the app returns to the foreground; refreshes if the data may be stale. */
+    fun onResumed() {
+        if (accessGranted && System.currentTimeMillis() - lastRefreshMillis > STALE_AFTER_MILLIS) refresh()
+    }
+
+    private fun refresh() {
+        lastRefreshMillis = System.currentTimeMillis()
         viewModelScope.launch { repository.refresh() }
     }
 
     fun loadMore() {
-        val current = _state.value
-        if (current.isLoadingMore || !current.canLoadMore) return
-        _state.update { it.copy(isLoadingMore = true) }
-        viewModelScope.launch {
-            val page = repository.getSuggestions(offset = current.suggestions.size, limit = PAGE_SIZE)
-            _state.update {
-                it.copy(
-                    suggestions = it.suggestions + page.items,
-                    canLoadMore = page.hasMore,
-                    isLoadingMore = false,
-                    selectedId = it.selectedId ?: page.items.firstOrNull()?.contact?.id,
-                )
-            }
-        }
+        visibleCount.update { it + PAGE_SIZE }
     }
 
     fun select(contactId: String) {
-        _state.update { it.copy(selectedId = contactId) }
+        local.update { it.copy(selectedId = contactId) }
     }
 
     fun onQueryChange(query: String) {
-        _state.update { it.copy(query = query) }
+        local.update { it.copy(query = query) }
         searchJob?.cancel()
         if (query.isBlank()) {
-            _state.update { it.copy(searchResults = emptyList()) }
+            local.update { it.copy(searchResults = emptyList()) }
             return
         }
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
             val results = repository.searchContacts(query)
-            _state.update { it.copy(searchResults = results) }
+            local.update { it.copy(searchResults = results) }
         }
     }
 
@@ -79,5 +99,6 @@ class HomeViewModel(private val repository: SuggestionsRepository) : ViewModel()
         // 7 = the hero cluster (3) plus one full row of 4 small bubbles.
         const val PAGE_SIZE = 7
         const val SEARCH_DEBOUNCE_MS = 150L
+        const val STALE_AFTER_MILLIS = 60_000L
     }
 }

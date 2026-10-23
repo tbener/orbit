@@ -1,27 +1,23 @@
 package com.smartdialer.data.fake
 
 import com.smartdialer.data.Contact
+import com.smartdialer.data.MAX_SUGGESTIONS
 import com.smartdialer.data.Suggestion
 import com.smartdialer.data.SuggestionBadge
-import com.smartdialer.data.SuggestionPage
 import com.smartdialer.data.SuggestionsRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Hardcoded in-memory data for the stage 1 UI shell. */
+/** Hardcoded in-memory data, handy for previews and for developing without a populated phone. */
 class FakeSuggestionsRepository : SuggestionsRepository {
 
     private val _isRefreshing = MutableStateFlow(false)
     override val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
-    override suspend fun getSuggestions(offset: Int, limit: Int): SuggestionPage {
-        delay(300)
-        val capped = suggestions.take(MAX_SUGGESTIONS)
-        val items = capped.drop(offset).take(limit)
-        return SuggestionPage(items = items, hasMore = offset + items.size < capped.size)
-    }
+    override val suggestions: StateFlow<List<Suggestion>> =
+        MutableStateFlow(fakeSuggestions.take(MAX_SUGGESTIONS)).asStateFlow()
 
     override suspend fun searchContacts(query: String): List<Contact> {
         val q = query.trim()
@@ -35,12 +31,10 @@ class FakeSuggestionsRepository : SuggestionsRepository {
     }
 
     private companion object {
-        const val MAX_SUGGESTIONS = 20
-
         fun s(id: String, name: String, subtitle: String?, reason: String, badge: SuggestionBadge? = null) =
             Suggestion(Contact(id, name), subtitle, badge, reason)
 
-        val suggestions = listOf(
+        val fakeSuggestions = listOf(
             s("mom", "Mom", "3 days", "You wanted to talk every 3 days, and it's been 3."),
             s("dana", "Dana", "Missed", "Dana called yesterday evening and you haven't called back yet.", SuggestionBadge.MissedCall),
             s("ron", "Ron", "Sunday", "You usually call Ron on Sundays."),
@@ -62,7 +56,7 @@ class FakeSuggestionsRepository : SuggestionsRepository {
         )
 
         val allContacts = (
-            suggestions.map { it.contact } + listOf(
+            fakeSuggestions.map { it.contact } + listOf(
                 Contact("eli", "Eli (Dentist)"),
                 Contact("gal", "Gal (Work)"),
                 Contact("amir", "Amir"),

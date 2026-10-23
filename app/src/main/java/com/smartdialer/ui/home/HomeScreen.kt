@@ -1,6 +1,5 @@
 package com.smartdialer.ui.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -43,7 +41,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusManager
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
@@ -53,9 +50,11 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Contact
 import com.smartdialer.data.Suggestion
+import com.smartdialer.ui.ContactAvatar
 import com.smartdialer.ui.theme.bubbleColorsFor
 
 private const val SMALL_ROW_SIZE = 4
@@ -68,20 +67,26 @@ fun HomeScreen(
     onLoadMore: () -> Unit,
     onOpenRules: () -> Unit,
     onOpenDialer: () -> Unit,
+    access: AccessState,
+    onRequestAccess: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     val searching = state.query.isNotBlank()
+    val needsAccess = if (searching) !access.contacts else !access.all
     Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             HomeHeader(onOpenRules)
             SearchField(state.query, onQueryChange)
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (searching) {
+                if (needsAccess) {
+                    PermissionPrompt(access, onRequestAccess, onOpenSettings)
+                } else if (searching) {
                     SearchResults(state.query, state.searchResults)
                 } else {
                     BubbleList(state, onSelect, onLoadMore)
                 }
             }
-            BottomPanel(state, showSuggestionInfo = !searching, onOpenDialer = onOpenDialer)
+            BottomPanel(state, showSuggestionInfo = !searching && !needsAccess, onOpenDialer = onOpenDialer)
         }
     }
 }
@@ -203,10 +208,19 @@ private fun BubbleList(
                 repeat(SMALL_ROW_SIZE - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
-        if (state.isLoadingMore || items.isEmpty()) {
-            item(key = "loading") {
-                Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+        if (items.isEmpty()) {
+            item(key = "empty") {
+                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
+                    if (state.isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(
+                            text = "No suggestions yet. Once you have call history with your contacts, they will show up here.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -251,15 +265,7 @@ private fun SearchResults(query: String, results: List<Contact>) {
                     .semantics(mergeDescendants = true) {},
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .then(if (colors.outlined) Modifier else Modifier.background(colors.container)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(initialsOf(contact.name), color = colors.content, fontWeight = FontWeight.Medium)
-                }
+                ContactAvatar(contact, diameter = 48.dp, initialsSp = 18, colors = colors)
                 Spacer(Modifier.width(16.dp))
                 Text(contact.name, style = MaterialTheme.typography.bodyLarge)
             }

@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.smartdialer.data.Suggestion
 import com.smartdialer.data.SuggestionBadge
+import com.smartdialer.ui.ContactAvatar
 import com.smartdialer.ui.theme.bubbleColorsFor
 
 /** Bubble sizes by priority. Larger means higher priority. */
@@ -74,11 +75,16 @@ fun ContactBubble(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(modifier = Modifier.size(tier.diameter)) {
+            ContactAvatar(
+                contact = suggestion.contact,
+                diameter = tier.diameter,
+                initialsSp = tier.initialsSp,
+                colors = colors,
+            )
+            // Selection ring and outline sit above the photo.
             Box(
                 modifier = Modifier
-                    .size(tier.diameter)
-                    .clip(CircleShape)
-                    .background(colors.container)
+                    .matchParentSize()
                     .then(
                         when {
                             selected -> Modifier.border(3.dp, MaterialTheme.colorScheme.primary, CircleShape)
@@ -86,15 +92,7 @@ fun ContactBubble(
                             else -> Modifier
                         },
                     ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = initialsOf(name),
-                    color = colors.content,
-                    fontSize = tier.initialsSp.sp,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
+            )
             if (suggestion.badge == SuggestionBadge.MissedCall) {
                 Box(
                     modifier = Modifier
@@ -138,13 +136,4 @@ fun ContactBubble(
             )
         }
     }
-}
-
-fun initialsOf(name: String): String {
-    val words = name.trim().split(" ").filter { it.isNotEmpty() && it.first().isLetterOrDigit() }
-    return when {
-        words.isEmpty() -> "?"
-        words.size == 1 -> words[0].take(2)
-        else -> "${words.first().first()}${words.last().first()}"
-    }.uppercase()
 }
