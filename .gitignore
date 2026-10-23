@@ -1,0 +1,30 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local config and secrets
+local.properties
+*.jks
+*.keystore
+keystore.properties
+.env
+.env.*
+*.pem
+
+# IDE
+.idea/
+*.iml
+.kotlin/
+captures/
+.externalNativeBuild
+.cxx
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Misc
+*.apk
+*.aab
+*.log
