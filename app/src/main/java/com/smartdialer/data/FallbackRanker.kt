@@ -46,7 +46,7 @@ object FallbackRanker {
                 score = CALLBACK_BASE_SCORE - daysSinceMissed.coerceAtMost(30),
                 suggestion = Suggestion(
                     contact = contact,
-                    subtitle = "Missed",
+                    subtitle = if (daysSinceMissed == 0L) "Missed today" else "Missed ${daysSinceMissed}d",
                     badge = SuggestionBadge.MissedCall,
                     reason = "${contact.name} called ${agoPhrase(daysSinceMissed)} and you haven't called back.",
                 ),

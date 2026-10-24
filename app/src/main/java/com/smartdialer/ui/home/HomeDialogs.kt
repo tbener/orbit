@@ -10,6 +10,10 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.ui.semantics.Role
+import com.smartdialer.ui.ContactAvatar
+import com.smartdialer.ui.theme.bubbleColorsFor
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -111,6 +115,96 @@ fun GeneralInstructionSheet(
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
                 trailing = { SendButton(enabled = text.isNotBlank(), description = "Save general instruction", onClick = { onSave(text.trim()) }) },
             )
+        }
+    }
+}
+
+/** A small note on contacts that a never-show rule keeps out of the suggestions. */
+@Composable
+fun HiddenLabel() {
+    Text(
+        text = "Hidden from suggestions",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/**
+ * The quick actions for a contact that has no bubble to anchor to (a search result): a bottom sheet with the
+ * same action list as the bubble popup, including the inline "Add instruction" field.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ContactActionsSheet(
+    contact: Contact,
+    hidden: Boolean,
+    actions: List<QuickAction>,
+    onDismiss: () -> Unit,
+) {
+    var inputFor by remember { mutableStateOf<QuickActionKind.Input?>(null) }
+    var text by remember { mutableStateOf("") }
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(inputFor) { if (inputFor != null) focus.requestFocus() }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = Orbit.spacing.xl, vertical = Orbit.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.lg)) {
+                ContactAvatar(contact, diameter = Orbit.sizing.avatarMedium, initialsSp = 18, colors = bubbleColorsFor(contact.id), glow = 0.2f)
+                Column {
+                    Text(contact.name, style = MaterialTheme.typography.titleLarge)
+                    if (hidden) HiddenLabel()
+                }
+            }
+            val input = inputFor
+            if (input == null) {
+                actions.forEach { action ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = Orbit.sizing.touchTarget)
+                            .clickable(role = Role.Button, onClickLabel = action.description) {
+                                when (val kind = action.kind) {
+                                    is QuickActionKind.Run -> { onDismiss(); kind.onClick() }
+                                    is QuickActionKind.Input -> inputFor = kind
+                                }
+                            }
+                            .padding(vertical = Orbit.spacing.sm),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.lg),
+                    ) {
+                        Icon(action.icon, contentDescription = null, tint = Orbit.colors.accent)
+                        Text(action.description, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+            } else {
+                OrbitTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = "Instruction about ${contact.name}",
+                    modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                    trailing = {
+                        SendButton(
+                            enabled = text.isNotBlank(),
+                            description = "Save instruction about ${contact.name}",
+                            onClick = {
+                                onDismiss()
+                                input.onSave(text.trim())
+                            },
+                        )
+                    },
+                )
+            }
         }
     }
 }

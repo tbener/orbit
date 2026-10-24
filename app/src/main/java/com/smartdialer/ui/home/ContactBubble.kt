@@ -152,15 +152,6 @@ fun ContactBubble(
             if (selected) {
                 Box(Modifier.matchParentSize().border(2.dp, Orbit.colors.accent, CircleShape))
             }
-            if (missed) {
-                Badge(
-                    modifier = Modifier.align(Alignment.TopEnd).offset(x = Orbit.spacing.xxs, y = -Orbit.spacing.xxs),
-                    size = style.badge,
-                    color = Orbit.colors.alert,
-                ) {
-                    Icon(Icons.Filled.PhoneMissed, contentDescription = null, tint = Orbit.colors.onAlert, modifier = Modifier.size(style.badge * 0.6f))
-                }
-            }
             if (suggestion.isPinned) {
                 Badge(
                     modifier = Modifier.align(Alignment.BottomEnd).offset(x = Orbit.spacing.xxs, y = Orbit.spacing.xxs),

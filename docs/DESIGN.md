@@ -115,7 +115,7 @@ off, every spec snaps and the drift, breathing and pulse are not run.
 
 ## Planned UX tweaks
 
-- Clean interface preferred. Planned: remove the missed-call badge icon (keep the "Missed" wording only if needed). To be done in the later UX tweaks pass.
+- Clean interface preferred. **Done:** the missed-call badge icon is removed from bubbles; a missed call is shown by subtitle text only ("Missed today", "Missed 2d"), plus the spoken description.
 
 ## Notes
 

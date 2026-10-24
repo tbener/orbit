@@ -31,7 +31,7 @@ class FallbackRankerTest {
         val result = rank(contacts, calls)
         assertEquals("Dana", result.first().contact.name)
         assertEquals(SuggestionBadge.MissedCall, result.first().badge)
-        assertEquals("Missed", result.first().subtitle)
+        assertTrue(result.first().subtitle!!.startsWith("Missed"))
     }
 
     @Test

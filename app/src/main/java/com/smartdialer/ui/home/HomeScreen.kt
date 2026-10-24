@@ -125,6 +125,7 @@ fun HomeScreen(
     var quick by remember { mutableStateOf<QuickTarget?>(null) }
     var numberPick by remember { mutableStateOf<NumberPick?>(null) }
     var showGeneralSheet by remember { mutableStateOf(false) }
+    var searchPick by remember { mutableStateOf<Contact?>(null) }
     var bottomPanelHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
 
@@ -142,6 +143,14 @@ fun HomeScreen(
             is NumberChoice.Pick -> numberPick = NumberPick(contact, purpose, choice.candidates)
         }
     }
+
+    fun handlersFor(contact: Contact) = QuickActionHandlers(
+        onCall = { useNumber(contact, NumberPurpose.Call) },
+        onWhatsApp = { useNumber(contact, NumberPurpose.WhatsApp) },
+        onContactCard = { actions.onOpenContactCard(contact) },
+        onDetails = { actions.onOpenDetails(contact) },
+        onSaveInstruction = { actions.onAddContactInstruction(contact, it) },
+    )
 
     val onBubbleGesture: OrbitGestureHandler = { entry, slot, gesture, bounds ->
         onSelect(entry.value.contact.id)
@@ -190,7 +199,7 @@ fun HomeScreen(
                             if (needsAccess) {
                                 PermissionPrompt(access, onRequestAccess, onOpenSettings)
                             } else if (searching) {
-                                SearchResults(state.query, state.searchResults)
+                                SearchResults(state.searchResults, state.hiddenIds) { searchPick = it }
                             } else {
                                 OrbitField(
                                     suggestions = state.suggestions,
@@ -224,13 +233,7 @@ fun HomeScreen(
 
             quick?.let { target ->
                 val contact = target.suggestion.contact
-                val handlers = QuickActionHandlers(
-                    onCall = { useNumber(contact, NumberPurpose.Call) },
-                    onWhatsApp = { useNumber(contact, NumberPurpose.WhatsApp) },
-                    onContactCard = { actions.onOpenContactCard(contact) },
-                    onDetails = { actions.onOpenDetails(contact) },
-                    onSaveInstruction = { actions.onAddContactInstruction(contact, it) },
-                )
+                val handlers = handlersFor(contact)
                 QuickActionsOverlay(
                     target = target,
                     actions = remember(target) { quickActionsFor(contact.name, handlers) },
@@ -245,6 +248,15 @@ fun HomeScreen(
             pick = pick,
             onPick = { number -> runWith(pick.purpose, number); numberPick = null },
             onDismiss = { numberPick = null },
+        )
+    }
+
+    searchPick?.let { contact ->
+        ContactActionsSheet(
+            contact = contact,
+            hidden = contact.id in state.hiddenIds,
+            actions = remember(contact) { quickActionsFor(contact.name, handlersFor(contact)) },
+            onDismiss = { searchPick = null },
         )
     }
 
@@ -368,7 +380,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
 }
 
 @Composable
-private fun SearchResults(query: String, results: List<Contact>) {
+private fun SearchResults(results: List<Contact>, hiddenIds: Set<String>, onPick: (Contact) -> Unit) {
     if (results.isEmpty()) {
         EmptyState(
             icon = Icons.Filled.Search,
@@ -384,6 +396,7 @@ private fun SearchResults(query: String, results: List<Contact>) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .clickable(role = Role.Button, onClickLabel = "Open actions for ${contact.name}") { onPick(contact) }
                     .heightIn(min = Orbit.sizing.touchTarget + Orbit.spacing.lg)
                     .padding(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.sm)
                     .semantics(mergeDescendants = true) {},
@@ -391,7 +404,10 @@ private fun SearchResults(query: String, results: List<Contact>) {
             ) {
                 ContactAvatar(contact, diameter = Orbit.sizing.avatarMedium, initialsSp = 18, colors = colors, glow = 0.2f)
                 Spacer(Modifier.width(Orbit.spacing.lg))
-                Text(contact.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                Column {
+                    Text(contact.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
+                    if (contact.id in hiddenIds) HiddenLabel()
+                }
             }
         }
     }

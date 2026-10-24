@@ -11,6 +11,7 @@ import com.smartdialer.data.SuggestionPipeline
 import com.smartdialer.data.SuggestionsRepository
 import com.smartdialer.llm.AiSettings
 import com.smartdialer.rules.RulesRepository
+import com.smartdialer.rules.TypedRuleParams
 import com.smartdialer.ui.UserMessage
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
@@ -37,6 +38,8 @@ data class HomeUiState(
     val aiProblem: Boolean = false,
     /** The AI switch is on but the user has not yet read what is sent; nothing is sent until they accept. */
     val needsDisclosure: Boolean = false,
+    /** Contacts under a never-show rule. Search still finds them; they are labelled. */
+    val hiddenIds: Set<String> = emptySet(),
 )
 
 class HomeViewModel(
@@ -67,8 +70,10 @@ class HomeViewModel(
         suggestions.isRefreshing,
         visibleCount,
         local,
-        aiSettings.state,
-    ) { enforced, refreshing, count, local, ai ->
+        combine(aiSettings.state, rules.typedRules) { ai, typed ->
+            ai to typed.map { it.params }.filterIsInstance<TypedRuleParams.NeverShow>().map { it.contact.lookupKey }.toSet()
+        },
+    ) { enforced, refreshing, count, local, (ai, hidden) ->
         val all = enforced.suggestions
         val visible = all.take(count)
         HomeUiState(
@@ -81,6 +86,7 @@ class HomeViewModel(
             searchResults = local.searchResults,
             aiProblem = ai.enabled && ai.disclosureAcknowledged && ai.lastFailureAt != null,
             needsDisclosure = ai.enabled && !ai.disclosureAcknowledged,
+            hiddenIds = hidden,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
