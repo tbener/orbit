@@ -54,7 +54,7 @@ import com.smartdialer.ui.theme.Orbit
 import com.smartdialer.ui.theme.bubbleColorsFor
 import kotlin.math.min
 
-/** Initials size and glow for a bubble on a given ring (0 is the top bubble). Bigger and brighter means closer to the top. */
+/** Initials size and glow for a bubble of a given size tier (0 is the top bubble). Bigger and brighter means higher priority. */
 class OrbStyle(val initialsSp: Int, val badge: Dp, val glow: Float) {
     companion object {
         fun forRing(ring: Int): OrbStyle = when (ring) {

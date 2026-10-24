@@ -2,22 +2,18 @@ package com.smartdialer.ui.home
 
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import kotlin.math.PI
-import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.sin
 
-/** One bubble's place on the orbit field. All values are in dp. */
+/** One bubble's place on the field. All values are in dp. */
 data class OrbitSlot(
-    /** Index into the suggestion list (0 is the top bubble in the middle). */
+    /** Index into the suggestion list (0 is the top bubble in the middle of the first row). */
     val index: Int,
-    /** 0 for the top bubble, 1 for the innermost ring, and so on. */
+    /** Size tier: 0 for the top bubble, 1 for #2 and #3, then 2, 3, ... for each grid row, a little smaller each time. */
     val ring: Int,
     val center: Offset,
     val diameter: Float,
     /** The width of the name under the bubble. */
     val labelWidth: Float,
-    /** The name, and for the inner rings a subtitle, hang below the bubble. */
+    /** The name and the subtitle hang below the bubble. */
     val labelHeight: Float,
     val showSubtitle: Boolean,
 ) {
@@ -31,108 +27,105 @@ data class OrbitSlot(
 
 data class OrbitLayoutResult(
     val slots: List<OrbitSlot>,
-    /** The center of the top bubble, which is also the center of every ring. */
+    /** The center of the top bubble. */
     val center: Offset,
-    /** Radii of the rings that hold bubbles, innermost first, plus one more to hint at the next. */
+    /** Radii of the faint halo rings behind the top bubble; empty when there is nothing to show. */
     val ringRadii: List<Float>,
     val contentHeight: Float,
 )
 
 /**
- * Places the suggestions on concentric rings around the top bubble. Pure and deterministic.
+ * Places the suggestions in rows. Pure and deterministic.
  *
- * The top bubble sits in the middle. The next ones go on the innermost ring, to the left and right of it
- * first, then wherever there is room. When a ring is full the rest move out to the next ring, where the
- * bubbles are a little smaller. A bubble is only placed where it (and its name) stays on screen and does
- * not overlap another bubble or name. Rings further out are only visible as arcs, because the screen is
- * narrower than they are wide.
+ * The first row holds the top three: the top bubble largest and in the middle, #2 on its left and #3 on its
+ * right, both medium. After that the bubbles sit in an aligned grid of [COLUMNS] per row, left to right and
+ * top to bottom, each row a little smaller than the one above (down to a minimum). Every bubble has its name
+ * under it, with the subtitle below that, both centered on the bubble. Nothing is placed on a ring;
+ * the only rings are a faint halo hugging the top bubble.
  */
 object OrbitLayout {
-    const val HERO_DIAMETER = 132f
+    const val HERO_DIAMETER = 128f
+    const val COLUMNS = 4
+
+    /** Where the top bubble's center is, from the top of the field. */
+    const val HERO_CENTER_Y = 88f
+
+    private const val MEDIUM_DIAMETER = 88f
     private const val HERO_LABEL_HEIGHT = 46f
-    private const val TOP_MARGIN = 10f
     private const val SIDE_MARGIN = 8f
     private const val GAP = 6f
-    private const val ANGLE_STEP = 5
+    private const val ROW_GAP = 16f
+    private const val FIRST_GRID_DIAMETER = 68f
+    private const val GRID_STEP = 4f
+    private const val MIN_GRID_DIAMETER = 52f
     private const val BOTTOM_ROOM = 150f
-    private const val MAX_RINGS = 40
+    private const val HALO_GAP = 6f
 
-    /** Where the top bubble's center is, from the top of the field. Room above for the first ring. */
-    const val HERO_CENTER_Y = 214f
-
-    /** The rings are ellipses, this much taller than wide, so they use the room above and below the top bubble. */
-    const val RING_STRETCH = 1.35f
-
-    private class RingSpec(val radius: Float, val diameter: Float, val labelHeight: Float, val subtitle: Boolean)
-
-    /** Ring sizes. [labelScale] grows the room under each bubble for names when the font is large. */
-    private fun ringSpec(ring: Int, labelScale: Float): RingSpec = when (ring) {
-        1 -> RingSpec(radius = 118f, diameter = 76f, labelHeight = 40f * labelScale, subtitle = true)
-        else -> {
-            val diameter = (66f - 5f * (ring - 2)).coerceAtLeast(46f)
-            // Further out each ring is one bubble, one name and a gap beyond the previous one.
-            val previous = ringSpec(ring - 1, labelScale)
-            val radius = (previous.radius + previous.diameter / 2f + previous.labelHeight + diameter / 2f + 6f - 20f)
-            RingSpec(radius, diameter, labelHeight = 20f * labelScale, subtitle = false)
-        }
+    /** Room under a bubble for its name and subtitle; grows with the font so the text stays inside. */
+    private fun labelHeight(tier: Int, labelScale: Float): Float = when (tier) {
+        0 -> HERO_LABEL_HEIGHT * labelScale
+        1 -> 40f * labelScale
+        else -> 38f * labelScale
     }
+
+    /** The diameter of a grid bubble in the given grid row (0 is the first row below the top three). */
+    private fun gridDiameter(row: Int, cellWidth: Float): Float =
+        (FIRST_GRID_DIAMETER - GRID_STEP * row).coerceAtLeast(MIN_GRID_DIAMETER).coerceAtMost(cellWidth - GAP)
 
     fun compute(count: Int, width: Float, labelScale: Float = 1f): OrbitLayoutResult {
         val center = Offset(width / 2f, HERO_CENTER_Y)
         if (count <= 0) return OrbitLayoutResult(emptyList(), center, emptyList(), 0f)
 
-        val hero = OrbitSlot(0, 0, center, HERO_DIAMETER, HERO_DIAMETER, HERO_LABEL_HEIGHT * labelScale, showSubtitle = true)
-        val slots = mutableListOf(hero)
-        var ring = 1
+        val slots = mutableListOf<OrbitSlot>()
+        val heroLabelHeight = labelHeight(0, labelScale)
+        slots += OrbitSlot(0, 0, center, HERO_DIAMETER, HERO_DIAMETER, heroLabelHeight, showSubtitle = true)
 
-        for (index in 1 until count) {
-            var placed: OrbitSlot? = null
-            while (placed == null && ring <= MAX_RINGS) {
-                placed = place(index, ring, center, width, slots, labelScale)
-                if (placed == null) ring++
-            }
-            slots += placed ?: break
-        }
-
-        val usedRings = slots.maxOf { it.ring }
-        val radii = (1..minOf(usedRings + 1, MAX_RINGS)).map { ringSpec(it, labelScale).radius }
-        val bottom = slots.maxOf { it.footprint.bottom }
-        return OrbitLayoutResult(slots, center, radii, bottom + BOTTOM_ROOM)
-    }
-
-    private fun place(index: Int, ring: Int, center: Offset, width: Float, placed: List<OrbitSlot>, labelScale: Float): OrbitSlot? {
-        val spec = ringSpec(ring, labelScale)
-        val labelWidth = if (spec.subtitle) spec.diameter + 12f else spec.diameter + 8f
-        for (degrees in candidateAngles(ring)) {
-            val radians = degrees * PI / 180.0
-            val slot = OrbitSlot(
+        // #2 and #3 are centered in the space between the screen edge and the top bubble.
+        val sideRegion = width / 2f - HERO_DIAMETER / 2f - SIDE_MARGIN
+        val sideDiameter = MEDIUM_DIAMETER.coerceAtMost(sideRegion - GAP)
+        val sideLabelWidth = sideRegion + HALO_GAP
+        val sideCenterOffset = HERO_DIAMETER / 2f + HALO_GAP + sideRegion / 2f
+        for (index in 1..minOf(2, count - 1)) {
+            val direction = if (index == 1) -1f else 1f
+            slots += OrbitSlot(
                 index = index,
-                ring = ring,
-                center = Offset(center.x + spec.radius * sin(radians).toFloat(), center.y + spec.radius * RING_STRETCH * cos(radians).toFloat()),
-                diameter = spec.diameter,
-                labelWidth = labelWidth,
-                labelHeight = spec.labelHeight,
-                showSubtitle = spec.subtitle,
+                ring = 1,
+                center = Offset(center.x + direction * sideCenterOffset, center.y),
+                diameter = sideDiameter,
+                labelWidth = sideLabelWidth - GAP,
+                labelHeight = labelHeight(1, labelScale),
+                showSubtitle = true,
             )
-            val box = slot.footprint
-            val fits = box.left >= SIDE_MARGIN && box.right <= width - SIDE_MARGIN && box.top >= TOP_MARGIN
-            if (fits && placed.none { it.footprint.inflate(GAP / 2f).overlaps(box.inflate(GAP / 2f)) }) return slot
         }
-        return null
-    }
 
-    /**
-     * Angles to try on a ring, in order of preference, in degrees measured from straight down (0): -90 is
-     * to the left of the top bubble and +90 to its right, 180 is straight up. The innermost ring prefers
-     * the two sides; further rings prefer straight below, where there is room to scroll.
-     */
-    private fun candidateAngles(ring: Int): List<Int> {
-        val all = (-180 until 180 step ANGLE_STEP).toList() + 180
-        val ordered = if (ring == 1) {
-            all.sortedWith(compareBy({ abs(abs(it) - 90) }, { if (it < 0) 0 else 1 }))
-        } else {
-            all.sortedWith(compareBy({ abs(it) }, { if (it < 0) 0 else 1 }))
+        // The grid starts below the tallest thing in the first row.
+        var rowTop = slots.maxOf { it.footprint.bottom } + ROW_GAP
+        val cellWidth = (width - 2f * SIDE_MARGIN) / COLUMNS
+        var index = 3
+        var row = 0
+        while (index < count) {
+            val diameter = gridDiameter(row, cellWidth)
+            val tier = 2 + row
+            val height = labelHeight(tier, labelScale)
+            for (column in 0 until COLUMNS) {
+                if (index >= count) break
+                slots += OrbitSlot(
+                    index = index,
+                    ring = tier,
+                    center = Offset(SIDE_MARGIN + cellWidth * (column + 0.5f), rowTop + diameter / 2f),
+                    diameter = diameter,
+                    labelWidth = cellWidth - GAP / 2f,
+                    labelHeight = height,
+                    showSubtitle = true,
+                )
+                index++
+            }
+            rowTop += diameter + height + ROW_GAP
+            row++
         }
-        return ordered.distinct().filter { it != 180 || ring == 1 }
+
+        val halo = listOf(HERO_DIAMETER / 2f + HALO_GAP)
+        val bottom = slots.maxOf { it.footprint.bottom }
+        return OrbitLayoutResult(slots, center, halo, bottom + BOTTOM_ROOM)
     }
 }

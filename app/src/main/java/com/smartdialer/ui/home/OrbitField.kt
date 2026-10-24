@@ -30,7 +30,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Brush
@@ -52,9 +51,9 @@ import kotlin.math.sin
 typealias OrbitGestureHandler = (IndexedValue<Suggestion>, OrbitSlot, BubbleGesture, Rect) -> Unit
 
 /**
- * The home screen's field of people: the top bubble in the middle with a soft glow, the others on
- * concentric rings around it, drifting very slowly. It scrolls vertically; more rings appear as it nears
- * the end. With system animations off, nothing drifts or breathes.
+ * The home screen's field of people, in rows: the top bubble in the middle with a soft glow and #2 and #3
+ * beside it, then a grid of four per row, drifting very slowly. It scrolls vertically; more rows appear as
+ * it nears the end. With system animations off, nothing drifts or breathes.
  */
 @Composable
 fun OrbitField(
@@ -135,14 +134,12 @@ fun OrbitField(
                             radius = glowRadius,
                             center = center,
                         )
-                        // The orbit rings, fading a little with distance.
-                        layout.ringRadii.forEachIndexed { i, radius ->
-                            val rx = radius.dp.toPx()
-                            val ry = rx * OrbitLayout.RING_STRETCH
-                            drawOval(
-                                color = colors.ring.copy(alpha = colors.ring.alpha * (1f - 0.12f * i).coerceAtLeast(0.3f)),
-                                topLeft = Offset(center.x - rx, center.y - ry),
-                                size = Size(rx * 2f, ry * 2f),
+                        // A very faint halo hugging the top bubble; no bubble sits on it.
+                        layout.ringRadii.forEach { radius ->
+                            drawCircle(
+                                color = colors.ring.copy(alpha = colors.ring.alpha * 0.7f),
+                                radius = radius.dp.toPx(),
+                                center = center,
                                 style = Stroke(width = 1.dp.toPx()),
                             )
                         }
@@ -159,11 +156,7 @@ fun OrbitField(
                         val top by animateDpAsState((slot.center.y - slot.diameter / 2f).dp, motion.move(380), label = "slotY")
                         val firstTime = remember { seen.add(suggestion.contact.id) }
                         val phase = (slot.index * 0.137f) % 1f
-                        val amplitude = when (slot.ring) {
-                            0 -> 1.6f
-                            1 -> 3.4f
-                            else -> 3f
-                        }
+                        val amplitude = if (slot.ring == 0) 1.6f else 2.2f
                         Box(
                             Modifier
                                 .offset(left, top)

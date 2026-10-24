@@ -1,8 +1,9 @@
 # Orbit design system
 
 **Direction.** Orbit taken literally: a calm, deep space where the people you should call float around
-you. Premium, minimal, a little playful. The person you most likely want to call is a glowing orb in the
-middle; the others drift on faint orbit rings around it, smaller and dimmer the further out they are.
+you. Premium, minimal, a little playful. The person you most likely want to call is a glowing orb at the
+top and center of the field; the others sit in tidy rows below and beside it, smaller and dimmer the
+lower their priority.
 Dark is the primary design (deep ink with a hint of navy, bright glossy orbs, one aqua-to-azure accent);
 light is its own design (soft off-white with pastel light and pastel orbs), not an inversion. Nothing is
 stock Material: surfaces are frosted glass, type is Outfit, shapes are custom.
@@ -29,7 +30,7 @@ gradient from a lighter top to a deeper bottom. Dark orbs are bright with ink in
 light orbs are pastel with deep initials (at least 5.3:1). A contact keeps the same tone for good;
 rank never changes the hue.
 
-**Never color alone.** Priority is size, glow and position on the rings. A missed call is a badge icon,
+**Never color alone.** Priority is size, glow and position in the rows. A missed call is a badge icon,
 the word "Missed" and the spoken description. A pinned contact has a pin badge and "pinned" in the
 spoken description. Soft and solid rules differ in shape, icon and label as well as color.
 
@@ -66,10 +67,17 @@ Details). The add field stacks above its send button on large fonts.
 
 ## Home
 
-The field (`OrbitLayout`, pure and unit-tested) puts the top bubble in the middle and the rest on
-concentric elliptical rings, each ring a little smaller. A bubble is placed only where it and its name
-stay on screen and clear of the others; when a ring is full the rest move outward, so the field scrolls
-and loads more rings near its end. The bubbles drift very slowly and the glow breathes.
+The field (`OrbitLayout`, pure and unit-tested) is a structured set of rows, like `docs/design/home-mockup.png`:
+
+- **Row 1:** the top-priority bubble is largest and centered, #2 on its left and #3 on its right, medium sized.
+- **Then rows of four** in an aligned grid, read left to right and top to bottom, each row slightly smaller
+  than the one above (down to a minimum). Pinned contacts keep the size of the slot they are pinned to.
+- **Every bubble has its name under it**, with a short subtitle ("Yesterday", "3 days") below, all centered on
+  the bubble in one text size per tier.
+- **Rings:** only a very faint halo hugging the top bubble. No bubble is ever placed on a ring.
+
+The field scrolls and loads more rows near its end (capped list). The bubbles drift very slowly and the glow
+breathes.
 
 Controls are minimal: a slim translucent search pill, glass icon buttons (rules, add general
 instruction), a small pulsing dot next to the title while refreshing, and a floating "Open dialer" pill
@@ -100,6 +108,10 @@ Tokens in `Motion`: 120 / 220 / 340 ms; entering things decelerate, leaving thin
 quicker; springs for the arc and the lift. Bubbles fade and scale in once, staggered. The drift (18s per
 cycle) and the glow breathing (5s) are ambient and slow. **Reduced motion:** when system animations are
 off, every spec snaps and the drift, breathing and pulse are not run.
+
+## Planned UX tweaks
+
+- Clean interface preferred. Planned: remove the missed-call badge icon (keep the "Missed" wording only if needed). To be done in the later UX tweaks pass.
 
 ## Notes
 
