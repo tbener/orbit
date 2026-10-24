@@ -72,16 +72,22 @@ fun EditFreeTextDialog(
     )
 }
 
-/** Form for adding ([initial] = null) or editing a typed rule: pick a type, a contact and, for pins, a slot. */
+/**
+ * Form for adding ([initial] = null) or editing a typed rule: pick a type, a contact and, for pins, a slot.
+ * With [fixedContact] the contact is set and cannot be changed (used on a contact's Details screen).
+ * [initialType] preselects the type when adding.
+ */
 @Composable
 fun TypedRuleDialog(
     initial: TypedRule?,
     contacts: List<Contact>?,
     onDismiss: () -> Unit,
     onSave: (TypedRuleParams) -> Unit,
+    fixedContact: ContactRef? = null,
+    initialType: TypedRuleType? = null,
 ) {
-    var type by remember { mutableStateOf(initial?.params?.type ?: TypedRuleType.PIN_TO_SLOT) }
-    var contact by remember { mutableStateOf(initial?.params?.contact) }
+    var type by remember { mutableStateOf(initial?.params?.type ?: initialType ?: TypedRuleType.PIN_TO_SLOT) }
+    var contact by remember { mutableStateOf(fixedContact ?: initial?.params?.contact) }
     var slotText by remember {
         mutableStateOf((initial?.params as? TypedRuleParams.PinToSlot)?.slot?.toString() ?: "1")
     }
@@ -108,11 +114,15 @@ fun TypedRuleDialog(
                         label = { Text("Never show") },
                     )
                 }
-                OutlinedButton(
-                    onClick = { picking = true },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
-                ) {
-                    Text(contact?.displayName ?: "Choose contact…")
+                if (fixedContact == null) {
+                    OutlinedButton(
+                        onClick = { picking = true },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    ) {
+                        Text(contact?.displayName ?: "Choose contact…")
+                    }
+                } else {
+                    Text("For ${fixedContact.displayName}", style = MaterialTheme.typography.bodyLarge)
                 }
                 if (type == TypedRuleType.PIN_TO_SLOT) {
                     OutlinedTextField(

@@ -3,6 +3,7 @@ package com.smartdialer.ui.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -20,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dialpad
+import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Info
@@ -30,10 +32,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -48,9 +48,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -59,13 +61,28 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Contact
-import com.smartdialer.data.MAX_SUGGESTIONS
+import com.smartdialer.data.NumberChoice
 import com.smartdialer.data.Suggestion
+import com.smartdialer.ui.CollectUserMessages
 import com.smartdialer.ui.ContactAvatar
+import com.smartdialer.ui.UserMessage
 import com.smartdialer.ui.theme.bubbleColorsFor
 import kotlinx.coroutines.flow.Flow
 
 private const val SMALL_ROW_SIZE = 4
+
+/** Everything the home screen can ask the app to do for a contact. */
+class HomeActions(
+    val chooseNumber: (Contact) -> NumberChoice,
+    val onCallNumber: (String) -> Unit,
+    val onWhatsAppNumber: (String) -> Unit,
+    val onOpenContactCard: (Contact) -> Unit,
+    val onOpenDetails: (Contact) -> Unit,
+    val onAddContactInstruction: (Contact, String) -> Unit,
+    val onAddGeneralInstruction: (String) -> Unit,
+)
+
+private typealias BubbleGestureHandler = (IndexedValue<Suggestion>, BubbleTier, BubbleGesture, Rect) -> Unit
 
 @Composable
 fun HomeScreen(
@@ -79,61 +96,102 @@ fun HomeScreen(
     onRequestAccess: () -> Unit,
     onOpenSettings: () -> Unit,
     messages: Flow<UserMessage>,
-    onPin: (Contact, Int) -> Unit,
-    onNeverSuggest: (Contact) -> Unit,
+    actions: HomeActions,
+    gestureMap: GestureMap = DefaultGestureMap,
 ) {
     val searching = state.query.isNotBlank()
     val needsAccess = if (searching) !access.contacts else !access.all
 
     val snackbarHostState = remember { SnackbarHostState() }
-    LaunchedEffect(messages) {
-        messages.collect { message ->
-            val result = snackbarHostState.showSnackbar(
-                message = message.text,
-                actionLabel = if (message.undo != null) "Undo" else null,
-                duration = SnackbarDuration.Long,
-            )
-            if (result == SnackbarResult.ActionPerformed) message.undo?.invoke()
+    CollectUserMessages(messages, snackbarHostState)
+
+    var quick by remember { mutableStateOf<QuickTarget?>(null) }
+    var numberPick by remember { mutableStateOf<NumberPick?>(null) }
+    var showGeneralSheet by remember { mutableStateOf(false) }
+
+    fun runWith(purpose: NumberPurpose, number: String) {
+        when (purpose) {
+            NumberPurpose.Call -> actions.onCallNumber(number)
+            NumberPurpose.WhatsApp -> actions.onWhatsAppNumber(number)
         }
     }
 
-    var pinTarget by remember { mutableStateOf<Pair<Suggestion, Int>?>(null) }
-    pinTarget?.let { (suggestion, slot) ->
-        PinSlotDialog(
-            contactName = suggestion.contact.name,
-            initialSlot = slot,
-            maxSlot = MAX_SUGGESTIONS,
-            onDismiss = { pinTarget = null },
-            onConfirm = { onPin(suggestion.contact, it); pinTarget = null },
+    fun useNumber(contact: Contact, purpose: NumberPurpose) {
+        when (val choice = actions.chooseNumber(contact)) {
+            NumberChoice.None -> Unit
+            is NumberChoice.Use -> runWith(purpose, choice.number)
+            is NumberChoice.Pick -> numberPick = NumberPick(contact, purpose, choice.candidates)
+        }
+    }
+
+    val onBubbleGesture: BubbleGestureHandler = { entry, tier, gesture, bounds ->
+        onSelect(entry.value.contact.id)
+        when (gestureMap.actionFor(gesture)) {
+            BubbleAction.OpenQuickActions -> quick = QuickTarget(entry.value, entry.index + 1, tier, bounds)
+            BubbleAction.Call -> useNumber(entry.value.contact, NumberPurpose.Call)
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            // While the card is open, screen readers should only see the card.
+            modifier = if (quick != null) Modifier.clearAndSetSemantics { } else Modifier,
+        ) { padding ->
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                HomeHeader(onOpenRules)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SearchField(state.query, onQueryChange, Modifier.weight(1f))
+                    IconButton(onClick = { showGeneralSheet = true }, modifier = Modifier.size(48.dp)) {
+                        Icon(Icons.Filled.EditNote, contentDescription = "Add general instruction")
+                    }
+                }
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                    if (needsAccess) {
+                        PermissionPrompt(access, onRequestAccess, onOpenSettings)
+                    } else if (searching) {
+                        SearchResults(state.query, state.searchResults)
+                    } else {
+                        BubbleList(state, onBubbleGesture, onLoadMore)
+                    }
+                }
+                BottomPanel(state, showSuggestionInfo = !searching && !needsAccess, onOpenDialer = onOpenDialer)
+            }
+        }
+
+        quick?.let { target ->
+            val contact = target.suggestion.contact
+            QuickActionsOverlay(
+                target = target,
+                handlers = QuickActionHandlers(
+                    onCall = { useNumber(contact, NumberPurpose.Call) },
+                    onWhatsApp = { useNumber(contact, NumberPurpose.WhatsApp) },
+                    onContactCard = { actions.onOpenContactCard(contact) },
+                    onDetails = { actions.onOpenDetails(contact) },
+                    onSaveInstruction = { actions.onAddContactInstruction(contact, it) },
+                ),
+                onDismiss = { quick = null },
+            )
+        }
+    }
+
+    numberPick?.let { pick ->
+        NumberPickerDialog(
+            pick = pick,
+            onPick = { number -> runWith(pick.purpose, number); numberPick = null },
+            onDismiss = { numberPick = null },
         )
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            HomeHeader(onOpenRules)
-            SearchField(state.query, onQueryChange)
-            Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (needsAccess) {
-                    PermissionPrompt(access, onRequestAccess, onOpenSettings)
-                } else if (searching) {
-                    SearchResults(state.query, state.searchResults)
-                } else {
-                    BubbleList(
-                        state = state,
-                        actions = BubbleActions(
-                            onSelect = onSelect,
-                            onPin = { suggestion, slot -> pinTarget = suggestion to slot },
-                            onNeverSuggest = { onNeverSuggest(it.contact) },
-                        ),
-                        onLoadMore = onLoadMore,
-                    )
-                }
-            }
-            BottomPanel(state, showSuggestionInfo = !searching && !needsAccess, onOpenDialer = onOpenDialer)
-        }
+    if (showGeneralSheet) {
+        GeneralInstructionSheet(
+            onDismiss = { showGeneralSheet = false },
+            onSave = { actions.onAddGeneralInstruction(it); showGeneralSheet = false },
+        )
     }
 }
 
@@ -156,12 +214,12 @@ private fun HomeHeader(onOpenRules: () -> Unit) {
 }
 
 @Composable
-private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
+private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier: Modifier = Modifier) {
     val focusManager: FocusManager = LocalFocusManager.current
     TextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).heightIn(min = 56.dp),
+        modifier = modifier.padding(vertical = 8.dp).heightIn(min = 56.dp),
         placeholder = { Text("Search all contacts") },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         trailingIcon = if (query.isNotEmpty()) {
@@ -189,7 +247,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 @Composable
 private fun BubbleList(
     state: HomeUiState,
-    actions: BubbleActions,
+    onGesture: BubbleGestureHandler,
     onLoadMore: () -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -214,7 +272,7 @@ private fun BubbleList(
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (hero != null) {
@@ -224,9 +282,9 @@ private fun BubbleList(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    flanks.getOrNull(0)?.let { Bubble(it, BubbleTier.Flank, state, actions) }
-                    Bubble(hero, BubbleTier.Hero, state, actions)
-                    flanks.getOrNull(1)?.let { Bubble(it, BubbleTier.Flank, state, actions) }
+                    flanks.getOrNull(0)?.let { Bubble(it, BubbleTier.Flank, state, onGesture) }
+                    Bubble(hero, BubbleTier.Hero, state, onGesture)
+                    flanks.getOrNull(1)?.let { Bubble(it, BubbleTier.Flank, state, onGesture) }
                 }
             }
         }
@@ -234,7 +292,7 @@ private fun BubbleList(
             val firstRow = row.first().index < 3 + SMALL_ROW_SIZE
             val tier = if (firstRow) BubbleTier.Medium else BubbleTier.Small
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                row.forEach { entry -> Bubble(entry, tier, state, actions, Modifier.weight(1f)) }
+                row.forEach { entry -> Bubble(entry, tier, state, onGesture, Modifier.weight(1f)) }
                 // Keep an incomplete last row aligned to the grid.
                 repeat(SMALL_ROW_SIZE - row.size) { Spacer(Modifier.weight(1f)) }
             }
@@ -258,31 +316,20 @@ private fun BubbleList(
     }
 }
 
-/** What the user can do with a bubble: tap it, or long-press for the rule shortcuts. */
-private class BubbleActions(
-    val onSelect: (String) -> Unit,
-    val onPin: (Suggestion, Int) -> Unit,
-    val onNeverSuggest: (Suggestion) -> Unit,
-)
-
 @Composable
 private fun Bubble(
     entry: IndexedValue<Suggestion>,
     tier: BubbleTier,
     state: HomeUiState,
-    actions: BubbleActions,
+    onGesture: BubbleGestureHandler,
     modifier: Modifier = Modifier,
 ) {
-    val suggestion = entry.value
-    val rank = entry.index + 1
     ContactBubble(
-        suggestion = suggestion,
-        rank = rank,
+        suggestion = entry.value,
+        rank = entry.index + 1,
         tier = tier,
-        selected = state.selectedId == suggestion.contact.id,
-        onClick = { actions.onSelect(suggestion.contact.id) },
-        onPin = { actions.onPin(suggestion, rank) },
-        onNeverSuggest = { actions.onNeverSuggest(suggestion) },
+        selected = state.selectedId == entry.value.contact.id,
+        onGesture = { gesture, bounds -> onGesture(entry, tier, gesture, bounds) },
         modifier = modifier,
     )
 }
@@ -299,7 +346,7 @@ private fun SearchResults(query: String, results: List<Contact>) {
         }
         return
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 4.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
         items(results, key = { it.id }) { contact ->
             val colors = bubbleColorsFor(contact.id)
             Row(

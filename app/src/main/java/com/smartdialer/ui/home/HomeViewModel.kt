@@ -4,12 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.Contact
 import com.smartdialer.data.ContactsRepository
+import com.smartdialer.data.NumberChoice
+import com.smartdialer.data.NumberChooser
 import com.smartdialer.data.Suggestion
 import com.smartdialer.data.SuggestionPipeline
 import com.smartdialer.data.SuggestionsRepository
-import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.RulesRepository
-import com.smartdialer.rules.TypedRuleParams
+import com.smartdialer.ui.UserMessage
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -18,7 +19,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -34,12 +34,9 @@ data class HomeUiState(
     val searchResults: List<Contact> = emptyList(),
 )
 
-/** A short message for a snackbar, optionally with an undo action. */
-class UserMessage(val text: String, val undo: (() -> Unit)? = null)
-
 class HomeViewModel(
     private val suggestions: SuggestionsRepository,
-    private val pipeline: SuggestionPipeline,
+    pipeline: SuggestionPipeline,
     private val rules: RulesRepository,
     private val contacts: ContactsRepository,
 ) : ViewModel() {
@@ -116,46 +113,36 @@ class HomeViewModel(
         }
     }
 
-    /**
-     * Pins [contact] to [slot]. Existing pins for the same contact or the same slot are replaced, so the
-     * newest intent wins here (the enforcer itself always prefers the older rule).
-     */
-    fun pin(contact: Contact, slot: Int) {
+    /** Picks the number to use for [contact]; tells the user when the contact has none. */
+    fun chooseNumber(contact: Contact): NumberChoice {
+        val numbers = contacts.contacts.value?.firstOrNull { it.contact.id == contact.id }?.numbers.orEmpty()
+        val lastUsed = suggestions.activity.value[contact.id]?.lastUsedByNumberKey.orEmpty()
+        val choice = NumberChooser.choose(numbers, lastUsed)
+        if (choice == NumberChoice.None) {
+            viewModelScope.launch { _messages.send(UserMessage("${contact.name} has no phone number")) }
+        }
+        return choice
+    }
+
+    /** Stores an instruction about one contact, unclassified. */
+    fun addContactInstruction(contact: Contact, text: String) {
         viewModelScope.launch {
-            val replaced = rules.typedRules.first().filter {
-                val p = it.params
-                p is TypedRuleParams.PinToSlot && (p.contact.lookupKey == contact.id || p.slot == slot)
-            }
-            replaced.forEach { rules.deleteTypedRule(it.id) }
-            val newId = rules.addTypedRule(TypedRuleParams.PinToSlot(ContactRef(contact.id, contact.name), slot))
-            val displaced = replaced.map { it.params.contact }.filter { it.lookupKey != contact.id }
-            val note = if (displaced.isEmpty()) "" else " (replaced the pin for ${displaced.joinToString { it.displayName }})"
+            val id = rules.addFreeTextRule(text, contactKey = contact.id)
             _messages.send(
-                UserMessage("Pinned ${contact.name} to slot $slot$note") {
-                    viewModelScope.launch {
-                        rules.deleteTypedRule(newId)
-                        replaced.forEach { rules.addTypedRule(it.params, it.sourceFreeTextRuleId, it.createdAt) }
-                    }
+                UserMessage("Instruction added for ${contact.name}") {
+                    viewModelScope.launch { rules.deleteFreeTextRule(id) }
                 },
             )
         }
     }
 
-    /** Adds a NEVER_SHOW rule for [contact]. */
-    fun neverSuggest(contact: Contact) {
+    /** Stores an instruction that applies to all contacts, unclassified. */
+    fun addGeneralInstruction(text: String) {
         viewModelScope.launch {
-            val already = rules.typedRules.first().any {
-                val p = it.params
-                p is TypedRuleParams.NeverShow && p.contact.lookupKey == contact.id
-            }
-            if (already) {
-                _messages.send(UserMessage("${contact.name} is already hidden from suggestions"))
-                return@launch
-            }
-            val newId = rules.addTypedRule(TypedRuleParams.NeverShow(ContactRef(contact.id, contact.name)))
+            val id = rules.addFreeTextRule(text, contactKey = null)
             _messages.send(
-                UserMessage("${contact.name} will no longer be suggested") {
-                    viewModelScope.launch { rules.deleteTypedRule(newId) }
+                UserMessage("General instruction saved") {
+                    viewModelScope.launch { rules.deleteFreeTextRule(id) }
                 },
             )
         }

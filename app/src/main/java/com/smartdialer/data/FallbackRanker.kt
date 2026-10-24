@@ -23,12 +23,7 @@ object FallbackRanker {
         nowMillis: Long,
         zone: ZoneId = ZoneId.systemDefault(),
     ): List<Suggestion> {
-        val contactByKey = HashMap<String, DeviceContact>()
-        contacts.forEach { c -> c.numbers.forEach { n -> numberKey(n)?.let { contactByKey.putIfAbsent(it, c) } } }
-
-        val callsByContact = calls
-            .mapNotNull { record -> numberKey(record.number)?.let(contactByKey::get)?.let { it to record } }
-            .groupBy({ it.first.contact.id }, { it.second })
+        val callsByContact = CallMatcher.groupByContact(contacts, calls)
         val contactById = contacts.associateBy { it.contact.id }
 
         return callsByContact
@@ -82,13 +77,13 @@ object FallbackRanker {
 
     private const val MILLIS_PER_DAY = 86_400_000.0
 
-    private fun daysBetween(fromMillis: Long, toMillis: Long, zone: ZoneId): Long =
+    internal fun daysBetween(fromMillis: Long, toMillis: Long, zone: ZoneId): Long =
         ChronoUnit.DAYS.between(
             Instant.ofEpochMilli(fromMillis).atZone(zone).toLocalDate(),
             Instant.ofEpochMilli(toMillis).atZone(zone).toLocalDate(),
         ).coerceAtLeast(0)
 
-    private fun agoPhrase(days: Long): String = when (days) {
+    internal fun agoPhrase(days: Long): String = when (days) {
         0L -> "today"
         1L -> "yesterday"
         else -> "$days days ago"
@@ -100,12 +95,5 @@ object FallbackRanker {
         days < 14 -> "$days days"
         days < 60 -> "${days / 7} weeks"
         else -> "${days / 30} months"
-    }
-
-    /** Matches the same phone number written in different formats by comparing its last digits. */
-    fun numberKey(number: String): String? {
-        val digits = number.filter { it.isDigit() }
-        if (digits.isEmpty()) return null
-        return digits.takeLast(9)
     }
 }

@@ -7,8 +7,11 @@ interface RulesRepository {
     val freeTextRules: Flow<List<FreeTextRule>>
     val typedRules: Flow<List<TypedRule>>
 
-    /** Stores a new rule as [FreeTextStatus.UNCLASSIFIED]. Returns its id. */
-    suspend fun addFreeTextRule(text: String): Long
+    /**
+     * Stores a new rule as [FreeTextStatus.UNCLASSIFIED]. Returns its id. A rule with a [contactKey]
+     * is about that contact; without one it is a general instruction.
+     */
+    suspend fun addFreeTextRule(text: String, contactKey: String? = null): Long
     suspend fun updateFreeTextRule(id: Long, text: String)
 
     /** Deleting a free-text rule keeps any typed rule it produced, but unlinks it. */

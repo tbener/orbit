@@ -14,13 +14,15 @@ import com.smartdialer.rules.TypedRuleType
  * The two rule lists live in separate tables. The links between them (`typedRuleId` and
  * `sourceFreeTextRuleId`) are kept consistent by [RoomRulesRepository], inside transactions.
  */
-@Entity(tableName = "free_text_rules", indices = [Index("typedRuleId")])
+@Entity(tableName = "free_text_rules", indices = [Index("typedRuleId"), Index("contactKey")])
 data class FreeTextRuleEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val text: String,
     val createdAt: Long,
     val status: FreeTextStatus,
     val typedRuleId: Long?,
+    /** Lookup key of the contact this rule is about; null for a general instruction. */
+    val contactKey: String? = null,
 )
 
 /** [paramsJson] holds the type-specific parameters, so new rule types need no schema change. */
@@ -33,7 +35,7 @@ data class TypedRuleEntity(
     val sourceFreeTextRuleId: Long?,
 )
 
-fun FreeTextRuleEntity.toDomain() = FreeTextRule(id, text, createdAt, status, typedRuleId)
+fun FreeTextRuleEntity.toDomain() = FreeTextRule(id, text, createdAt, status, typedRuleId, contactKey)
 
 /** Returns null for a row whose parameters cannot be read, instead of crashing the whole list. */
 fun TypedRuleEntity.toDomainOrNull(): TypedRule? =

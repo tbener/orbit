@@ -10,6 +10,9 @@ interface SuggestionsRepository {
     /** The full ranked list, best first, re-emitted whenever a refresh finishes. Not capped. */
     val suggestions: StateFlow<List<Suggestion>>
 
+    /** Call-log derived facts per contact (by contact id), from the last refresh. */
+    val activity: StateFlow<Map<String, ContactActivity>>
+
     /** True while a refresh of the ranking is running. */
     val isRefreshing: StateFlow<Boolean>
 

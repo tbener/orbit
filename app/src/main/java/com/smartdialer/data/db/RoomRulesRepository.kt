@@ -23,13 +23,14 @@ class RoomRulesRepository(
     override val typedRules: Flow<List<TypedRule>> =
         typed.observeAll().map { rows -> rows.mapNotNull(TypedRuleEntity::toDomainOrNull) }
 
-    override suspend fun addFreeTextRule(text: String): Long =
+    override suspend fun addFreeTextRule(text: String, contactKey: String?): Long =
         freeText.insert(
             FreeTextRuleEntity(
                 text = text.trim(),
                 createdAt = nowMillis(),
                 status = FreeTextStatus.UNCLASSIFIED,
                 typedRuleId = null,
+                contactKey = contactKey,
             ),
         )
 

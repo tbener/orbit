@@ -17,19 +17,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -37,11 +34,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -49,7 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.smartdialer.ranking.TraceEntry
 import com.smartdialer.rules.FreeTextRule
-import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
 
@@ -63,6 +57,13 @@ class RulesActions(
     val onBack: () -> Unit,
 )
 
+/** Which free-text rules the Rules page lists. */
+enum class FreeTextFilter(val label: String) {
+    All("All"),
+    General("General"),
+    ByContact("By contact"),
+}
+
 private sealed interface Pending {
     data class EditFreeText(val rule: FreeTextRule) : Pending
     data class DeleteFreeText(val rule: FreeTextRule) : Pending
@@ -71,22 +72,20 @@ private sealed interface Pending {
     data class DeleteTyped(val rule: TypedRule, val summary: String) : Pending
 }
 
-private fun FreeTextStatus.label(): String = when (this) {
-    FreeTextStatus.UNCLASSIFIED -> "Unclassified (classification arrives in a later stage)"
-    FreeTextStatus.SOFT -> "Soft preference"
-    FreeTextStatus.CONVERTED_TO_TYPED -> "Converted to a typed rule"
-}
-
-private fun TypedRuleParams.describe(name: String): String = when (this) {
-    is TypedRuleParams.PinToSlot -> "Always show $name in slot $slot"
-    is TypedRuleParams.NeverShow -> "Never show $name"
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RulesScreen(state: RulesUiState, actions: RulesActions) {
     var pending by remember { mutableStateOf<Pending?>(null) }
+    var filter by rememberSaveable { mutableStateOf(FreeTextFilter.All) }
     val namesByKey = state.contacts?.associate { it.id to it.name }
+
+    val shownFreeText = state.freeText.filter {
+        when (filter) {
+            FreeTextFilter.All -> true
+            FreeTextFilter.General -> it.contactKey == null
+            FreeTextFilter.ByContact -> it.contactKey != null
+        }
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -110,20 +109,48 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                 SectionHeader(
                     title = "Free-text rules",
                     tag = "Read by the LLM",
-                    description = "Preferences in your own words. The LLM interprets them and can get exact placement wrong.",
+                    description = "Instructions in your own words, general or about one contact. The LLM interprets them and can get exact placement wrong.",
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
-            item(key = "free-add") { AddFreeTextRow(onAdd = actions.addFreeText) }
-            if (state.freeText.isEmpty()) {
-                item(key = "free-empty") { EmptyHint("No free-text rules yet.") }
+            item(key = "free-add") {
+                AddFreeTextRow(
+                    label = "Add a general instruction",
+                    helper = "Saved as an unclassified instruction for all contacts. The LLM will sort it into a soft preference or a typed rule in a later stage. To add one about a single contact, open that contact's details.",
+                    onAdd = actions.addFreeText,
+                )
             }
-            items(state.freeText, key = { "f-${it.id}" }) { rule ->
+            item(key = "free-filter") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FreeTextFilter.entries.forEach { option ->
+                        FilterChip(
+                            selected = filter == option,
+                            onClick = { filter = option },
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
+            }
+            if (shownFreeText.isEmpty()) {
+                item(key = "free-empty") {
+                    EmptyHint(if (state.freeText.isEmpty()) "No free-text rules yet." else "No free-text rules match this filter.")
+                }
+            }
+            items(shownFreeText, key = { "f-${it.id}" }) { rule ->
+                val key = rule.contactKey
+                val name = key?.let { namesByKey?.get(it) }
+                val notFound = key != null && namesByKey != null && name == null
+                val scope = when {
+                    key == null -> "General"
+                    name != null -> "About $name"
+                    notFound -> "About a contact that was not found"
+                    else -> "About a contact"
+                }
                 RuleRow(
                     icon = Icons.Outlined.ChatBubbleOutline,
                     text = rule.text,
-                    detail = rule.status.label(),
+                    detail = "$scope · ${rule.status.label()}",
                     detailIsWarning = false,
                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
                     accent = MaterialTheme.colorScheme.primary,
@@ -205,118 +232,6 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
             onDismiss = { pending = null },
             onConfirm = { actions.deleteTyped(action.rule.id); pending = null },
         )
-    }
-}
-
-@Composable
-private fun SectionHeader(
-    title: String,
-    tag: String,
-    description: String,
-    containerColor: Color,
-    contentColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.semantics { heading() },
-            )
-            Spacer(Modifier.width(12.dp))
-            Surface(color = containerColor, contentColor = contentColor, shape = RoundedCornerShape(8.dp)) {
-                Text(
-                    text = tag,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                )
-            }
-        }
-        Text(
-            text = description,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
-        )
-    }
-}
-
-@Composable
-private fun AddFreeTextRow(onAdd: (String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("Add a rule in your own words") },
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            Button(
-                onClick = { onAdd(text); text = "" },
-                enabled = text.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text("Add rule") }
-        }
-        Text(
-            text = "New rules are saved as unclassified. The LLM will sort them into soft preferences and typed rules in a later stage.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
-    }
-}
-
-@Composable
-private fun EmptyHint(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(vertical = 8.dp),
-    )
-}
-
-@Composable
-private fun RuleRow(
-    icon: ImageVector,
-    text: String,
-    detail: String?,
-    detailIsWarning: Boolean,
-    containerColor: Color,
-    accent: Color,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-) {
-    Surface(color = containerColor, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.heightIn(min = 64.dp).padding(start = 16.dp, end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f).padding(vertical = 12.dp)) {
-                Text(text = text, style = MaterialTheme.typography.bodyMedium)
-                if (detail != null) {
-                    Text(
-                        text = detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (detailIsWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontWeight = if (detailIsWarning) FontWeight.SemiBold else FontWeight.Normal,
-                    )
-                }
-            }
-            IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Edit, contentDescription = "Edit rule: $text")
-            }
-            IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Delete, contentDescription = "Delete rule: $text")
-            }
-        }
     }
 }
 

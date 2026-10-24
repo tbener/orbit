@@ -60,6 +60,23 @@ class RuleDaoTest {
     }
 
     @Test
+    fun freeTextRule_withoutContactIsGeneral_withContactIsAboutThatContact() = runBlocking {
+        repo.addFreeTextRule("general")
+        repo.addFreeTextRule("about mom", contactKey = mom.lookupKey)
+        val rules = repo.freeTextRules.first()
+        assertEquals(mom.lookupKey, rules[0].contactKey)
+        assertNull(rules[1].contactKey)
+    }
+
+    @Test
+    fun deletingAContactRuleLeavesGeneralOnesAlone() = runBlocking {
+        val about = repo.addFreeTextRule("about mom", contactKey = mom.lookupKey)
+        repo.addFreeTextRule("general")
+        repo.deleteFreeTextRule(about)
+        assertEquals(listOf("general"), repo.freeTextRules.first().map { it.text })
+    }
+
+    @Test
     fun freeTextRule_canBeEditedAndDeleted() = runBlocking {
         val id = repo.addFreeTextRule("old")
         repo.updateFreeTextRule(id, "new")

@@ -1,14 +1,13 @@
 package com.smartdialer.ui.home
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -17,10 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneMissed
-import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -32,10 +27,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +39,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.smartdialer.data.Suggestion
 import com.smartdialer.data.SuggestionBadge
 import com.smartdialer.ui.ContactAvatar
@@ -57,6 +52,11 @@ enum class BubbleTier(val diameter: Dp, val initialsSp: Int, val badge: Dp) {
     Small(56.dp, 18, 20.dp),
 }
 
+/**
+ * A contact bubble. When [onGesture] is null the bubble is display-only (used for the copy shown above
+ * the dimmed screen behind the quick-actions card). The rect passed to [onGesture] is the bubble's
+ * bounds in the window.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContactBubble(
@@ -64,14 +64,12 @@ fun ContactBubble(
     rank: Int,
     tier: BubbleTier,
     selected: Boolean,
-    onClick: () -> Unit,
-    onPin: () -> Unit,
-    onNeverSuggest: () -> Unit,
+    onGesture: ((BubbleGesture, Rect) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
     val colors = bubbleColorsFor(suggestion.contact.id)
     val name = suggestion.contact.name
-    var menuOpen by remember { mutableStateOf(false) }
+    var bounds by remember { mutableStateOf(Rect.Zero) }
     val description = buildString {
         append(name)
         append(", priority ").append(rank)
@@ -82,39 +80,28 @@ fun ContactBubble(
 
     Column(
         modifier = modifier
+            .onGloballyPositioned { bounds = it.boundsInWindow() }
             .clip(RoundedCornerShape(16.dp))
-            .combinedClickable(
-                onClickLabel = "Show why $name is suggested",
-                role = Role.Button,
-                onLongClickLabel = "More actions for $name",
-                onLongClick = { menuOpen = true },
-                onClick = onClick,
+            .then(
+                if (onGesture == null) {
+                    Modifier
+                } else {
+                    Modifier.combinedClickable(
+                        onClickLabel = "Open quick actions for $name",
+                        role = Role.Button,
+                        onLongClickLabel = "Open quick actions for $name",
+                        onLongClick = { onGesture(BubbleGesture.LongPress, bounds) },
+                        onClick = { onGesture(BubbleGesture.Tap, bounds) },
+                    )
+                },
             )
             .padding(4.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = description
                 stateDescription = if (selected) "Selected" else ""
-                customActions = listOf(
-                    CustomAccessibilityAction("Pin to slot") { onPin(); true },
-                    CustomAccessibilityAction("Never suggest") { onNeverSuggest(); true },
-                )
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = { Text("Pin to slot…") },
-                leadingIcon = { Icon(Icons.Filled.PushPin, contentDescription = null) },
-                onClick = { menuOpen = false; onPin() },
-                modifier = Modifier.heightIn(min = 48.dp),
-            )
-            DropdownMenuItem(
-                text = { Text("Never suggest") },
-                leadingIcon = { Icon(Icons.Filled.VisibilityOff, contentDescription = null) },
-                onClick = { menuOpen = false; onNeverSuggest() },
-                modifier = Modifier.heightIn(min = 48.dp),
-            )
-        }
         Box(modifier = Modifier.size(tier.diameter)) {
             ContactAvatar(
                 contact = suggestion.contact,

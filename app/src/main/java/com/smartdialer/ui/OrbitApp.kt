@@ -2,14 +2,12 @@ package com.smartdialer.ui
 
 import android.Manifest
 import android.app.Activity
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,14 +28,18 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.smartdialer.OrbitApplication
+import com.smartdialer.ui.details.DetailsActions
+import com.smartdialer.ui.details.DetailsScreen
+import com.smartdialer.ui.details.DetailsViewModel
 import com.smartdialer.ui.home.AccessState
+import com.smartdialer.ui.home.HomeActions
 import com.smartdialer.ui.home.HomeScreen
 import com.smartdialer.ui.home.HomeViewModel
 import com.smartdialer.ui.rules.RulesActions
 import com.smartdialer.ui.rules.RulesScreen
 import com.smartdialer.ui.rules.RulesViewModel
 
-private enum class Screen { Home, Rules }
+private enum class Screen { Home, Rules, Details }
 
 private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_CALL_LOG)
 
@@ -67,7 +69,10 @@ fun OrbitApp() {
     )
 
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
-    BackHandler(enabled = screen == Screen.Rules) { screen = Screen.Home }
+    var detailsKey by rememberSaveable { mutableStateOf<String?>(null) }
+    BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
+
+    val contactActions = rememberContactActions()
 
     var askedForAccess by rememberSaveable { mutableStateOf(false) }
     var access by remember { mutableStateOf(readAccess(context, askedForAccess)) }
@@ -81,13 +86,6 @@ fun OrbitApp() {
     }
     LaunchedEffect(access.all) { homeViewModel.onAccessChanged(access.all) }
 
-    val openDialer = {
-        try {
-            context.startActivity(Intent(Intent.ACTION_DIAL))
-        } catch (_: ActivityNotFoundException) {
-            Toast.makeText(context, "No dialer app found", Toast.LENGTH_SHORT).show()
-        }
-    }
     val openAppSettings = {
         context.startActivity(
             Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
@@ -103,16 +101,53 @@ fun OrbitApp() {
                 onSelect = homeViewModel::select,
                 onLoadMore = homeViewModel::loadMore,
                 onOpenRules = { screen = Screen.Rules },
-                onOpenDialer = openDialer,
+                onOpenDialer = contactActions::openDialer,
                 access = access,
                 onRequestAccess = {
                     permissionLauncher.launch(REQUIRED_PERMISSIONS.filterNot { isGranted(context, it) }.toTypedArray())
                 },
                 onOpenSettings = openAppSettings,
                 messages = homeViewModel.messages,
-                onPin = homeViewModel::pin,
-                onNeverSuggest = homeViewModel::neverSuggest,
+                actions = HomeActions(
+                    chooseNumber = homeViewModel::chooseNumber,
+                    onCallNumber = contactActions::call,
+                    onWhatsAppNumber = contactActions::whatsApp,
+                    onOpenContactCard = { contactActions.openContactCard(it.id) },
+                    onOpenDetails = { detailsKey = it.id; screen = Screen.Details },
+                    onAddContactInstruction = homeViewModel::addContactInstruction,
+                    onAddGeneralInstruction = homeViewModel::addGeneralInstruction,
+                ),
             )
+        }
+        Screen.Details -> {
+            val key = detailsKey
+            if (key == null) {
+                screen = Screen.Home
+            } else {
+                val detailsViewModel: DetailsViewModel = viewModel(
+                    key = "details-$key",
+                    factory = viewModelFactory {
+                        initializer {
+                            DetailsViewModel(key, container.rulesRepository, container.contactsRepository, container.suggestionsRepository)
+                        }
+                    },
+                )
+                val state by detailsViewModel.state.collectAsStateWithLifecycle()
+                DetailsScreen(
+                    state = state,
+                    messages = detailsViewModel.messages,
+                    nowMillis = System.currentTimeMillis(),
+                    actions = DetailsActions(
+                        addInstruction = detailsViewModel::addInstruction,
+                        updateInstruction = detailsViewModel::updateInstruction,
+                        deleteInstruction = detailsViewModel::deleteInstruction,
+                        addTyped = detailsViewModel::addTyped,
+                        updateTyped = detailsViewModel::updateTyped,
+                        deleteTyped = detailsViewModel::deleteTyped,
+                        onBack = { screen = Screen.Home },
+                    ),
+                )
+            }
         }
         Screen.Rules -> {
             val state by rulesViewModel.state.collectAsStateWithLifecycle()

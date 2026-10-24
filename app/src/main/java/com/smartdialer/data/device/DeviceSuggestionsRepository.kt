@@ -1,6 +1,9 @@
 package com.smartdialer.data.device
 
 import com.smartdialer.data.CallLogSource
+import com.smartdialer.data.CallMatcher
+import com.smartdialer.data.ContactActivity
+import com.smartdialer.data.ContactSignals
 import com.smartdialer.data.ContactsRepository
 import com.smartdialer.data.FallbackRanker
 import com.smartdialer.data.Suggestion
@@ -21,6 +24,9 @@ class DeviceSuggestionsRepository(
     private val _suggestions = MutableStateFlow<List<Suggestion>>(emptyList())
     override val suggestions: StateFlow<List<Suggestion>> = _suggestions.asStateFlow()
 
+    private val _activity = MutableStateFlow<Map<String, ContactActivity>>(emptyMap())
+    override val activity: StateFlow<Map<String, ContactActivity>> = _activity.asStateFlow()
+
     private val _isRefreshing = MutableStateFlow(false)
     override val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
@@ -33,6 +39,9 @@ class DeviceSuggestionsRepository(
             val contacts = contactsRepository.contacts.value.orEmpty()
             val now = nowMillis()
             val calls = callLogSource.loadCalls(now - HISTORY_WINDOW_MILLIS)
+            _activity.value = CallMatcher.groupByContact(contacts, calls).mapValues { (_, records) ->
+                ContactActivity(ContactSignals.from(records), CallMatcher.lastUsedByNumberKey(records))
+            }
             _suggestions.value = FallbackRanker.rank(contacts, calls, now)
         } finally {
             _isRefreshing.value = false

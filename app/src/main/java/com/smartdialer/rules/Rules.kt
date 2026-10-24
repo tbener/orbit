@@ -15,6 +15,8 @@ data class FreeTextRule(
     val status: FreeTextStatus,
     /** The typed rule this rule was converted into, if any. */
     val typedRuleId: Long?,
+    /** The contact (lookup key) this rule is about. Null means a general instruction for all contacts. */
+    val contactKey: String? = null,
 )
 
 /**
