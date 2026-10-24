@@ -1,15 +1,17 @@
 package com.smartdialer.ui.home
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -26,11 +28,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -52,33 +54,41 @@ import com.smartdialer.ui.theme.Orbit
 import com.smartdialer.ui.theme.bubbleColorsFor
 import kotlin.math.min
 
-/**
- * Bubble sizes by priority. Larger and higher (more shadow) means higher priority. The top two tiers use
- * the stronger tone fill.
- */
-enum class BubbleTier(val diameter: Dp, val initialsSp: Int, val badge: Dp, val elevation: Dp, val strongTone: Boolean) {
-    Hero(120.dp, 38, 28.dp, Orbit.elevation.high, strongTone = true),
-    Flank(80.dp, 26, 24.dp, Orbit.elevation.medium, strongTone = true),
-    Medium(64.dp, 21, 22.dp, Orbit.elevation.low * 2, strongTone = false),
-    Small(56.dp, 18, 20.dp, Orbit.elevation.low, strongTone = false),
+/** Initials size and glow for a bubble on a given ring (0 is the top bubble). Bigger and brighter means closer to the top. */
+class OrbStyle(val initialsSp: Int, val badge: Dp, val glow: Float) {
+    companion object {
+        fun forRing(ring: Int): OrbStyle = when (ring) {
+            0 -> OrbStyle(initialsSp = 44, badge = 30.dp, glow = 1f)
+            1 -> OrbStyle(initialsSp = 26, badge = 22.dp, glow = 0.5f)
+            2 -> OrbStyle(initialsSp = 22, badge = 20.dp, glow = 0.35f)
+            3 -> OrbStyle(initialsSp = 20, badge = 19.dp, glow = 0.28f)
+            else -> OrbStyle(initialsSp = 17, badge = 17.dp, glow = 0.2f)
+        }
+    }
 }
 
 /**
- * A contact bubble. When [onGesture] is null the bubble is display-only (used for the copy shown above
- * the dimmed screen behind the quick-actions card). The rect passed to [onGesture] is the bubble's
- * bounds in the window.
+ * A contact bubble: the orb with its name (and, on the inner rings, a subtitle) underneath. When
+ * [onGesture] is null the bubble is display-only (used for the lifted copy above the dimmed screen). The
+ * rect passed to [onGesture] is the bubble's bounds in the window.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContactBubble(
     suggestion: Suggestion,
     rank: Int,
-    tier: BubbleTier,
+    ring: Int,
+    diameter: Dp,
+    labelWidth: Dp,
+    showSubtitle: Boolean,
     selected: Boolean,
     onGesture: ((BubbleGesture, Rect) -> Unit)?,
     modifier: Modifier = Modifier,
+    /** 0 to 1: how far the bubble has lifted forward (the quick-actions copy), which brightens its glow. */
+    lift: Float = 0f,
 ) {
-    val colors = bubbleColorsFor(suggestion.contact.id, strong = tier.strongTone)
+    val style = OrbStyle.forRing(ring)
+    val colors = bubbleColorsFor(suggestion.contact.id)
     val name = suggestion.contact.name
     val missed = suggestion.badge == SuggestionBadge.MissedCall
     var bounds by remember { mutableStateOf(Rect.Zero) }
@@ -89,20 +99,34 @@ fun ContactBubble(
         if (missed) append(", missed call")
         if (suggestion.isPinned) append(", pinned")
     }
-    // With a large font size the labels get a little more room and may wrap to two lines.
+    // With a large font the names may wrap, but stop growing at 150% so they stay under their orb.
     val largeFont = LocalDensity.current.fontScale > 1.3f
-    val nameLines = if (largeFont) 2 else 1
-    val labelWidth = maxOf(tier.diameter + if (largeFont) Orbit.spacing.lg else 0.dp, 72.dp)
+    val nameLines = if (largeFont && ring <= 1) 2 else 1
+    val nameStyle = when (ring) {
+        0 -> MaterialTheme.typography.titleMedium
+        1 -> MaterialTheme.typography.labelLarge
+        else -> MaterialTheme.typography.labelMedium
+    }
+
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    // Pressing a bubble squeezes it slightly. (No ripple: a clipped ripple would also cut off the glow.)
+    val pressScale by animateFloatAsState(if (pressed) 0.94f else 1f, Orbit.motion.move(120), label = "press")
 
     Column(
         modifier = modifier
             .onGloballyPositioned { bounds = it.boundsInWindow() }
-            .clip(MaterialTheme.shapes.medium)
+            .graphicsLayer {
+                scaleX = pressScale
+                scaleY = pressScale
+            }
             .then(
                 if (onGesture == null) {
                     Modifier
                 } else {
                     Modifier.combinedClickable(
+                        interactionSource = interaction,
+                        indication = null,
                         onClickLabel = "Open quick actions for $name",
                         role = Role.Button,
                         onLongClickLabel = "Open quick actions for $name",
@@ -111,94 +135,86 @@ fun ContactBubble(
                     )
                 },
             )
-            .padding(Orbit.spacing.xs)
             .semantics(mergeDescendants = true) {
                 contentDescription = description
                 stateDescription = if (selected) "Selected" else ""
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(modifier = Modifier.size(tier.diameter)) {
+        Box(modifier = Modifier.size(diameter)) {
             ContactAvatar(
                 contact = suggestion.contact,
-                diameter = tier.diameter,
-                initialsSp = tier.initialsSp,
+                diameter = diameter,
+                initialsSp = style.initialsSp,
                 colors = colors,
-                elevation = tier.elevation,
+                glow = min(1f, style.glow + 0.7f * lift),
             )
-            // The selection ring sits above the photo.
             if (selected) {
-                Box(Modifier.matchParentSize().border(3.dp, MaterialTheme.colorScheme.primary, CircleShape))
+                Box(Modifier.matchParentSize().border(2.dp, Orbit.colors.accent, CircleShape))
             }
             if (missed) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(x = Orbit.spacing.xxs, y = -Orbit.spacing.xxs)
-                        .size(tier.badge)
-                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.error),
-                    contentAlignment = Alignment.Center,
+                Badge(
+                    modifier = Modifier.align(Alignment.TopEnd).offset(x = Orbit.spacing.xxs, y = -Orbit.spacing.xxs),
+                    size = style.badge,
+                    color = Orbit.colors.alert,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.PhoneMissed,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onError,
-                        modifier = Modifier.size(tier.badge * 0.6f),
-                    )
+                    Icon(Icons.Filled.PhoneMissed, contentDescription = null, tint = Orbit.colors.onAlert, modifier = Modifier.size(style.badge * 0.6f))
                 }
             }
             if (suggestion.isPinned) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .offset(x = Orbit.spacing.xxs, y = Orbit.spacing.xxs)
-                        .size(tier.badge)
-                        .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                    contentAlignment = Alignment.Center,
+                Badge(
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = Orbit.spacing.xxs, y = Orbit.spacing.xxs),
+                    size = style.badge,
+                    color = Orbit.colors.accent,
                 ) {
-                    Icon(
-                        imageVector = Icons.Filled.PushPin,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(tier.badge * 0.6f),
-                    )
+                    Icon(Icons.Filled.PushPin, contentDescription = null, tint = Orbit.colors.onAccent, modifier = Modifier.size(style.badge * 0.6f))
                 }
             }
         }
-        Spacer(Modifier.height(Orbit.spacing.sm))
+        Spacer(Modifier.height(if (ring == 0) Orbit.spacing.sm else Orbit.spacing.xs))
         CappedFontScale {
-        Text(
-            text = name,
-            style = if (tier == BubbleTier.Hero) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = nameLines,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.width(labelWidth),
-        )
-        suggestion.subtitle?.let {
             Text(
-                text = it,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (missed) Orbit.colors.alertText else MaterialTheme.colorScheme.onSurfaceVariant,
-                fontWeight = if (missed) FontWeight.SemiBold else null,
-                maxLines = 1,
+                text = name,
+                style = nameStyle,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = nameLines,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.width(labelWidth),
             )
-        }
+            if (showSubtitle) {
+                suggestion.subtitle?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (missed) Orbit.colors.alertText else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (missed) FontWeight.SemiBold else null,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.width(labelWidth),
+                    )
+                }
+            }
         }
     }
 }
 
+@Composable
+private fun Badge(modifier: Modifier, size: Dp, color: Color, content: @Composable () -> Unit) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .border(2.dp, MaterialTheme.colorScheme.background, CircleShape)
+            .clip(CircleShape)
+            .background(color),
+        contentAlignment = Alignment.Center,
+    ) { content() }
+}
+
 /**
- * Bubble labels sit under fixed-size circles, so they grow with the user's font size only up to 150%
- * (the full text is always available in the quick-actions card and on the Details screen at any size).
+ * Bubble labels sit under fixed-size orbs, so they grow with the user's font size only up to 150% (the
+ * full text is always available in the quick-actions caption and on the Details screen at any size).
  */
 @Composable
 private fun CappedFontScale(content: @Composable () -> Unit) {
@@ -227,7 +243,7 @@ fun Modifier.bubbleEntrance(play: Boolean, index: Int): Modifier {
     )
     return graphicsLayer {
         alpha = progress
-        val scale = 0.85f + 0.15f * progress
+        val scale = 0.8f + 0.2f * progress
         scaleX = scale
         scaleY = scale
     }

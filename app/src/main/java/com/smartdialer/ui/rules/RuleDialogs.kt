@@ -2,7 +2,10 @@ package com.smartdialer.ui.rules
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,10 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -26,8 +26,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Contact
 import com.smartdialer.data.MAX_SUGGESTIONS
 import com.smartdialer.rules.ContactRef
@@ -36,8 +36,11 @@ import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
 import com.smartdialer.rules.TypedRuleType
 import com.smartdialer.ui.ContactAvatar
+import com.smartdialer.ui.components.OrbitChip
+import com.smartdialer.ui.components.OrbitTextField
 import com.smartdialer.ui.theme.Orbit
 import com.smartdialer.ui.theme.bubbleColorsFor
+import com.smartdialer.ui.theme.glass
 
 private const val MAX_SLOT = MAX_SUGGESTIONS
 
@@ -50,13 +53,14 @@ fun EditFreeTextDialog(
     var text by remember { mutableStateOf(rule.text) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        title = { Text("Edit free-text rule") },
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = { Text("Edit rule", style = MaterialTheme.typography.titleMedium) },
         text = {
-            OutlinedTextField(
+            OrbitTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Rule") },
+                placeholder = "Rule",
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -79,6 +83,7 @@ fun EditFreeTextDialog(
  * With [fixedContact] the contact is set and cannot be changed (used on a contact's Details screen).
  * [initialType] preselects the type when adding.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TypedRuleDialog(
     initial: TypedRule?,
@@ -101,39 +106,40 @@ fun TypedRuleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        title = { Text(if (initial == null) "Add typed rule" else "Edit typed rule") },
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = { Text(if (initial == null) "Add typed rule" else "Edit typed rule", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
-                    FilterChip(
-                        selected = type == TypedRuleType.PIN_TO_SLOT,
-                        onClick = { type = TypedRuleType.PIN_TO_SLOT },
-                        label = { Text("Pin to slot") },
-                    )
-                    FilterChip(
-                        selected = type == TypedRuleType.NEVER_SHOW,
-                        onClick = { type = TypedRuleType.NEVER_SHOW },
-                        label = { Text("Never show") },
-                    )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
+                    OrbitChip("Pin to slot", type == TypedRuleType.PIN_TO_SLOT, { type = TypedRuleType.PIN_TO_SLOT })
+                    OrbitChip("Never show", type == TypedRuleType.NEVER_SHOW, { type = TypedRuleType.NEVER_SHOW })
                 }
                 if (fixedContact == null) {
-                    OutlinedButton(
-                        onClick = { picking = true },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = Orbit.sizing.touchTarget),
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .glass(MaterialTheme.shapes.medium)
+                            .clickable(role = Role.Button) { picking = true }
+                            .heightIn(min = Orbit.sizing.touchTarget)
+                            .padding(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.md),
+                        contentAlignment = Alignment.CenterStart,
                     ) {
-                        Text(contact?.displayName ?: "Choose contact…")
+                        Text(
+                            text = contact?.displayName ?: "Choose contact…",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (contact == null) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onBackground,
+                        )
                     }
                 } else {
                     Text("For ${fixedContact.displayName}", style = MaterialTheme.typography.bodyLarge)
                 }
                 if (type == TypedRuleType.PIN_TO_SLOT) {
-                    OutlinedTextField(
+                    OrbitTextField(
                         value = slotText,
                         onValueChange = { value -> slotText = value.filter { it.isDigit() }.take(2) },
-                        label = { Text("Slot (1 = top, up to $MAX_SLOT)") },
+                        placeholder = "Slot (1 = top, up to $MAX_SLOT)",
                         singleLine = true,
-                        isError = !slotValid,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -183,21 +189,22 @@ private fun ContactPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        title = { Text("Choose contact") },
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = { Text("Choose contact", style = MaterialTheme.typography.titleMedium) },
         text = {
             if (contacts == null) {
                 Text("Contacts are not available. Allow contacts access on the home screen first.")
             } else {
                 Column {
-                    OutlinedTextField(
+                    OrbitTextField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("Search") },
+                        placeholder = "Search",
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    LazyColumn(Modifier.heightIn(max = Orbit.sizing.popupWidth).padding(top = Orbit.spacing.sm)) {
+                    LazyColumn(Modifier.heightIn(max = Orbit.sizing.avatarLarge * 3).padding(top = Orbit.spacing.sm)) {
                         items(shown, key = { it.id }) { contact ->
                             Row(
                                 modifier = Modifier
@@ -233,9 +240,10 @@ fun ConfirmDeleteDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
-        title = { Text("Delete this rule?") },
-        text = { Text(summary) },
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = { Text("Delete this rule?", style = MaterialTheme.typography.titleMedium) },
+        text = { Text(summary, style = MaterialTheme.typography.bodyMedium) },
         confirmButton = {
             TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) {
                 Text("Delete", color = MaterialTheme.colorScheme.error)

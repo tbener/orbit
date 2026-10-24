@@ -1,13 +1,11 @@
 package com.smartdialer.ui.components
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -18,10 +16,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import com.smartdialer.ui.theme.Orbit
+import com.smartdialer.ui.theme.glassCircle
 
 /**
- * An empty list: an icon, a short title and one sentence that says what to do next.
- * [compact] is the smaller version used inside a section that has other content around it.
+ * An empty list: a glass orb with an icon, a short and slightly playful title, and one sentence that says
+ * what to do next. [compact] is the smaller version used inside a section that has other content around it.
  */
 @Composable
 fun EmptyState(
@@ -32,7 +31,7 @@ fun EmptyState(
     compact: Boolean = false,
 ) {
     val circle = if (compact) Orbit.sizing.avatarMedium + Orbit.spacing.sm else Orbit.sizing.avatarLarge - Orbit.spacing.lg
-    val glyph = if (compact) Orbit.sizing.icon + Orbit.spacing.xs else Orbit.sizing.emptyStateIcon
+    val glyph = if (compact) Orbit.sizing.icon else Orbit.sizing.emptyStateIcon
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -42,15 +41,13 @@ fun EmptyState(
         verticalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
     ) {
         Box(
-            modifier = Modifier
-                .size(circle)
-                .background(MaterialTheme.colorScheme.surfaceContainer, CircleShape),
+            modifier = Modifier.size(circle).glassCircle(strong = true, elevation = Orbit.elevation.low),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = Orbit.colors.accent,
                 modifier = Modifier.size(glyph),
             )
         }

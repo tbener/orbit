@@ -1,34 +1,62 @@
+@file:OptIn(androidx.compose.ui.text.ExperimentalTextApi::class)
+
 package com.smartdialer.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import com.smartdialer.R
 
 /**
- * The type scale. The system sans-serif is used on purpose: it is always available, renders every
- * script, and follows the user's font settings. Sizes are in sp so they grow with the font scale.
+ * Outfit (SIL Open Font License, see docs/licenses): a geometric, slightly rounded sans that is friendly
+ * without being childish. One variable font file provides every weight.
+ */
+val OrbitFont = FontFamily(
+    Font(R.font.outfit, FontWeight.Light, variationSettings = FontVariation.Settings(FontVariation.weight(300))),
+    Font(R.font.outfit, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
+    Font(R.font.outfit, FontWeight.Medium, variationSettings = FontVariation.Settings(FontVariation.weight(500))),
+    Font(R.font.outfit, FontWeight.SemiBold, variationSettings = FontVariation.Settings(FontVariation.weight(600))),
+    Font(R.font.outfit, FontWeight.Bold, variationSettings = FontVariation.Settings(FontVariation.weight(700))),
+)
+
+private fun style(size: Int, line: Int, weight: FontWeight, spacing: Double = 0.0) = TextStyle(
+    fontFamily = OrbitFont,
+    fontSize = size.sp,
+    lineHeight = line.sp,
+    fontWeight = weight,
+    letterSpacing = spacing.sp,
+)
+
+/**
+ * The type scale. Sizes are in sp so they grow with the user's font setting.
  *
- * Where each style is used:
- * - headlineSmall: a contact's name on the Details screen
+ * - headlineSmall: a contact's name on Details
  * - titleLarge: screen titles ("Who to call", "Rules")
- * - titleMedium: section headers, card titles, the top bubble's name
- * - titleSmall: dialog and sheet sub-headings
- * - bodyLarge / bodyMedium: lists and notes ("why" text, rule text)
- * - bodySmall: helper text and descriptions
+ * - titleMedium: section headers, the top bubble's name
+ * - titleSmall: card titles, dialog headings
+ * - bodyLarge / bodyMedium: lists and notes (the "why" text, rule text)
+ * - bodySmall: one-line subtitles and helper text
  * - labelLarge: bubble names, buttons
- * - labelMedium: bubble subtitles, tags
- * - labelSmall: quick-action labels
+ * - labelMedium / labelSmall: bubble subtitles, tags, quick-action labels
  */
 internal val OrbitTypography = Typography(
-    headlineSmall = TextStyle(fontSize = 26.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold),
-    titleLarge = TextStyle(fontSize = 24.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp),
-    titleSmall = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.1.sp),
-    bodyLarge = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.2.sp),
-    bodyMedium = TextStyle(fontSize = 14.sp, lineHeight = 21.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.2.sp),
-    bodySmall = TextStyle(fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.Normal, letterSpacing = 0.3.sp),
-    labelLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.1.sp),
-    labelMedium = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp),
-    labelSmall = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.3.sp),
+    displayLarge = style(57, 64, FontWeight.Light),
+    displayMedium = style(45, 52, FontWeight.Light),
+    displaySmall = style(36, 44, FontWeight.Normal),
+    headlineLarge = style(32, 40, FontWeight.Medium),
+    headlineMedium = style(28, 36, FontWeight.Medium),
+    headlineSmall = style(28, 34, FontWeight.Medium, -0.2),
+    titleLarge = style(28, 34, FontWeight.Medium, -0.3),
+    titleMedium = style(17, 24, FontWeight.SemiBold, 0.0),
+    titleSmall = style(15, 21, FontWeight.SemiBold, 0.1),
+    bodyLarge = style(16, 24, FontWeight.Normal, 0.1),
+    bodyMedium = style(14, 21, FontWeight.Normal, 0.15),
+    bodySmall = style(13, 18, FontWeight.Normal, 0.2),
+    labelLarge = style(14, 20, FontWeight.Medium, 0.1),
+    labelMedium = style(12, 16, FontWeight.Medium, 0.3),
+    labelSmall = style(12, 16, FontWeight.Medium, 0.3),
 )

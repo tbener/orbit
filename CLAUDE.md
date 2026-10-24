@@ -17,6 +17,9 @@ Native Android, Kotlin, Jetpack Compose, Material 3. Gradle Kotlin DSL with vers
 - `llm/` API client, prompt building, response parsing
 - `rules/` free-text rules and typed rules, as separate models
 
+## Design
+The visual design is described in `docs/DESIGN.md` and implemented as tokens in `ui/theme` (`Orbit.colors`, `Orbit.spacing`, `Orbit.motion`, `Modifier.glass`, `OrbitBackground`). Screens use only tokens; do not hard-code colors, sizes or durations. Dark is the primary design; light is its own design. Respect reduced motion (`Orbit.motion.reduced`), 48dp touch targets and content descriptions.
+
 ## Design principle: nothing hidden
 Everything Orbit stores or decides must be visible and editable by the user: free-text rules, typed rules, per-contact and general instructions, hidden contacts, and (from stage 4) how the LLM classified each instruction and the reasons it generated. Anything created automatically must be correctable (for example changing a rule's classification from soft to hard, or deleting it). Never create hidden state the user can't inspect.
 

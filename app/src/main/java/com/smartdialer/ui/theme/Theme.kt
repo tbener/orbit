@@ -11,7 +11,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import kotlin.math.abs
 
-private val LocalOrbitColors = compositionLocalOf { LightExtras }
+private val LocalOrbitColors = compositionLocalOf { DarkExtras }
 private val LocalMotion = compositionLocalOf { Motion(reduced = false) }
 
 /** Orbit's own design tokens, next to `MaterialTheme`. Colors and motion depend on the theme; the rest are constants. */
@@ -47,16 +47,13 @@ fun OrbitTheme(
     }
 }
 
-/** The two colors of a bubble: its fill and the color of the initials on it. */
-data class BubbleColors(val container: Color, val content: Color)
+/** The colors of a bubble: a gradient from [top] to [bottom], and the initials color on it. */
+data class BubbleColors(val top: Color, val bottom: Color, val content: Color)
 
-/**
- * Picks the tone for a contact, the same one every time. The top two tiers use the stronger fill so the
- * people nearest the top stand out a little more; the hue itself never changes with rank.
- */
+/** Picks the tone for a contact, the same one every time. Rank never changes the hue. */
 @Composable
-fun bubbleColorsFor(contactId: String, strong: Boolean = false): BubbleColors {
+fun bubbleColorsFor(contactId: String): BubbleColors {
     val tones = Orbit.colors.bubbleTones
     val tone = tones[abs(contactId.hashCode()) % tones.size]
-    return BubbleColors(if (strong) tone.strong else tone.soft, tone.content)
+    return BubbleColors(tone.top, tone.bottom, tone.content)
 }

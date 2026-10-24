@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -29,8 +27,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import com.smartdialer.data.Contact
+import com.smartdialer.ui.components.OrbitTextField
+import com.smartdialer.ui.components.SendButton
 import com.smartdialer.ui.theme.Orbit
-import com.smartdialer.ui.theme.PillShape
 
 enum class NumberPurpose(val verb: String) {
     Call("Call"),
@@ -48,7 +47,8 @@ fun NumberPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        shape = MaterialTheme.shapes.large,
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         title = { Text("${pick.purpose.verb} ${pick.contact.name}: which number?", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column {
@@ -86,7 +86,7 @@ fun GeneralInstructionSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
         Column(
             modifier = Modifier
@@ -96,29 +96,21 @@ fun GeneralInstructionSheet(
                 .padding(horizontal = Orbit.spacing.xl, vertical = Orbit.spacing.sm),
             verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
         ) {
-            Text("Add general instruction", style = MaterialTheme.typography.titleLarge)
+            Text("General instruction", style = MaterialTheme.typography.titleLarge)
             Text(
-                text = "This applies to all contacts, for example \"ignore missed calls\". It is saved as an unclassified instruction; classification arrives in a later stage. You can edit or delete it on the Rules page.",
+                text = "Applies to everyone, like \"ignore missed calls\". Saved as it is; you can edit or delete it on the Rules page.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            OutlinedTextField(
+            OrbitTextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Instruction") },
+                placeholder = "Instruction for all contacts",
                 minLines = 3,
-                shape = MaterialTheme.shapes.medium,
+                shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
+                trailing = { SendButton(enabled = text.isNotBlank(), description = "Save general instruction", onClick = { onSave(text.trim()) }) },
             )
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") }
-                Button(
-                    onClick = { onSave(text.trim()) },
-                    enabled = text.isNotBlank(),
-                    shape = PillShape,
-                    modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget),
-                ) { Text("Save") }
-            }
         }
     }
 }

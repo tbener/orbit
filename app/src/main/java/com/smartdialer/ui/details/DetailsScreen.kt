@@ -7,32 +7,23 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,9 +31,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.material.icons.filled.Add
 import com.smartdialer.data.Contact
 import com.smartdialer.data.SignalSummary
 import com.smartdialer.rules.ContactRef
@@ -54,16 +47,23 @@ import com.smartdialer.ui.CollectUserMessages
 import com.smartdialer.ui.ContactAvatar
 import com.smartdialer.ui.UserMessage
 import com.smartdialer.ui.components.EmptyState
-import com.smartdialer.ui.rules.AddFreeTextRow
+import com.smartdialer.ui.components.InfoDialog
+import com.smartdialer.ui.rules.AddRuleField
 import com.smartdialer.ui.rules.ConfirmDeleteDialog
 import com.smartdialer.ui.rules.EditFreeTextDialog
+import com.smartdialer.ui.rules.FREE_TEXT_INFO
+import com.smartdialer.ui.rules.GlassPanel
+import com.smartdialer.ui.rules.RuleKind
 import com.smartdialer.ui.rules.RuleRow
+import com.smartdialer.ui.rules.ScreenHeader
 import com.smartdialer.ui.rules.SectionHeader
+import com.smartdialer.ui.rules.SolidButton
+import com.smartdialer.ui.rules.TYPED_INFO
 import com.smartdialer.ui.rules.TypedRuleDialog
 import com.smartdialer.ui.rules.describe
 import com.smartdialer.ui.rules.label
 import com.smartdialer.ui.theme.Orbit
-import com.smartdialer.ui.theme.PillShape
+import com.smartdialer.ui.theme.OrbitBackground
 import com.smartdialer.ui.theme.bubbleColorsFor
 import kotlinx.coroutines.flow.Flow
 
@@ -86,7 +86,6 @@ private sealed interface Pending {
 }
 
 /** Orbit's page for one contact: recent activity, their instructions and their typed rules. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DetailsScreen(
     state: DetailsUiState,
@@ -95,6 +94,7 @@ fun DetailsScreen(
     actions: DetailsActions,
 ) {
     var pending by remember { mutableStateOf<Pending?>(null) }
+    var info by remember { mutableStateOf<RuleKind?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
     CollectUserMessages(messages, snackbarHostState)
 
@@ -102,175 +102,149 @@ fun DetailsScreen(
     val ref = ContactRef(state.contactKey, name)
     val notFound = state.contactsLoaded && state.contact == null
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Details") },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                navigationIcon = {
-                    IconButton(onClick = actions.onBack, modifier = Modifier.size(Orbit.sizing.touchTarget)) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(Orbit.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
-        ) {
-            item(key = "header") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val contact = state.contact ?: Contact(state.contactKey, name)
-                    ContactAvatar(
-                        contact = contact,
-                        diameter = Orbit.sizing.avatarLarge,
-                        initialsSp = 30,
-                        colors = bubbleColorsFor(contact.id, strong = true),
-                        elevation = Orbit.elevation.medium,
-                    )
-                    Spacer(Modifier.width(Orbit.spacing.lg))
-                    Column(verticalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
-                        Text(
-                            text = name,
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            modifier = Modifier.semantics { heading() },
-                        )
-                        if (notFound) {
-                            Text(
-                                text = "Contact not found. Rules below are skipped until the contact is back.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Orbit.colors.alertText,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
-                }
-            }
-            item(key = "summary") {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainer,
-                    shape = MaterialTheme.shapes.large,
-                    modifier = Modifier.fillMaxWidth(),
+    OrbitBackground {
+        Scaffold(
+            containerColor = Color.Transparent,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+        ) { padding ->
+            Column(Modifier.padding(padding).fillMaxSize()) {
+                ScreenHeader(title = "Details", onBack = actions.onBack)
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = Orbit.spacing.lg, end = Orbit.spacing.lg, bottom = Orbit.spacing.xxl),
+                    verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
                 ) {
-                    Column(Modifier.padding(Orbit.spacing.lg), verticalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Outlined.History,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(Orbit.sizing.iconSmall),
+                    item(key = "header") {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = Orbit.spacing.xl, bottom = Orbit.spacing.sm)) {
+                            val contact = state.contact ?: Contact(state.contactKey, name)
+                            ContactAvatar(
+                                contact = contact,
+                                diameter = Orbit.sizing.avatarLarge,
+                                initialsSp = 34,
+                                colors = bubbleColorsFor(contact.id),
+                                glow = 0.55f,
                             )
-                            Spacer(Modifier.width(Orbit.spacing.sm))
-                            Text("Recent activity", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-                        }
-                        SignalSummary.lines(name, state.signals, nowMillis).forEach {
-                            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+                            Spacer(Modifier.width(Orbit.spacing.lg))
+                            Column(verticalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
+                                Text(
+                                    text = name,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    modifier = Modifier.semantics { heading() },
+                                )
+                                if (notFound) {
+                                    Text(
+                                        text = "Contact not found. Their rules are skipped until they are back.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = Orbit.colors.alertText,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
                         }
                     }
-                }
-            }
+                    item(key = "summary") {
+                        GlassPanel {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Outlined.History,
+                                    contentDescription = null,
+                                    tint = Orbit.colors.accent,
+                                    modifier = Modifier.size(Orbit.sizing.iconSmall),
+                                )
+                                Spacer(Modifier.width(Orbit.spacing.sm))
+                                Text("Recent activity", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onBackground)
+                            }
+                            SignalSummary.lines(name, state.signals, nowMillis).forEach {
+                                Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
 
-            item(key = "instructions-header") {
-                SectionHeader(
-                    icon = Icons.Outlined.ChatBubbleOutline,
-                    title = "Instructions for $name",
-                    tag = "Read by the LLM",
-                    description = "In your own words. Only used for this contact.",
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(top = Orbit.spacing.sm),
-                )
-            }
-            item(key = "instructions-add") {
-                AddFreeTextRow(
-                    label = "Add an instruction about $name",
-                    helper = "Saved as an unclassified instruction. Classification arrives in a later stage.",
-                    onAdd = actions.addInstruction,
-                )
-            }
-            if (state.instructions.isEmpty()) {
-                item(key = "instructions-empty") {
-                    EmptyState(
-                        icon = Icons.Outlined.ChatBubbleOutline,
-                        title = "No instructions about $name",
-                        body = "Add things like \"only call after 6pm\". Orbit keeps them with $name and reads them when ranking.",
-                        compact = true,
-                    )
-                }
-            }
-            items(state.instructions, key = { "i-${it.id}" }) { rule ->
-                RuleRow(
-                    icon = Icons.Outlined.ChatBubbleOutline,
-                    text = rule.text,
-                    detail = rule.status.label(),
-                    detailIsWarning = false,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                    accent = MaterialTheme.colorScheme.primary,
-                    onEdit = { pending = Pending.EditInstruction(rule) },
-                    onDelete = { pending = Pending.DeleteInstruction(rule) },
-                )
-            }
+                    item(key = "instructions-header") {
+                        SectionHeader(
+                            kind = RuleKind.Soft,
+                            icon = Icons.Outlined.ChatBubbleOutline,
+                            title = "About $name",
+                            subtitle = "In your words. Only for this contact.",
+                            onInfo = { info = RuleKind.Soft },
+                            modifier = Modifier.padding(top = Orbit.spacing.md),
+                        )
+                    }
+                    item(key = "instructions-add") {
+                        AddRuleField(placeholder = "Add an instruction about $name", onAdd = actions.addInstruction)
+                    }
+                    if (state.instructions.isEmpty()) {
+                        item(key = "instructions-empty") {
+                            EmptyState(
+                                icon = Icons.Outlined.ChatBubbleOutline,
+                                title = "Nothing yet",
+                                body = "Try \"only call after 6pm\". Orbit keeps it with $name.",
+                                compact = true,
+                            )
+                        }
+                    }
+                    items(state.instructions, key = { "i-${it.id}" }) { rule ->
+                        RuleRow(
+                            kind = RuleKind.Soft,
+                            icon = Icons.Outlined.ChatBubbleOutline,
+                            text = rule.text,
+                            detail = rule.status.label(),
+                            detailIsWarning = false,
+                            onEdit = { pending = Pending.EditInstruction(rule) },
+                            onDelete = { pending = Pending.DeleteInstruction(rule) },
+                        )
+                    }
 
-            item(key = "typed-header") {
-                SectionHeader(
-                    icon = Icons.Filled.Rule,
-                    title = "Typed rules for $name",
-                    tag = "Enforced by code",
-                    description = "Hard rules applied after the LLM answers.",
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(top = Orbit.spacing.xl),
-                )
-            }
-            item(key = "typed-add") {
-                val tonal = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
-                    FilledTonalButton(
-                        onClick = { pending = Pending.AddTyped(TypedRuleType.PIN_TO_SLOT) },
-                        shape = PillShape,
-                        colors = tonal,
-                        modifier = Modifier.weight(1f).heightIn(min = Orbit.sizing.touchTarget),
-                    ) { Text("Pin to slot…") }
-                    FilledTonalButton(
-                        onClick = { actions.addTyped(TypedRuleParams.NeverShow(ref)) },
-                        shape = PillShape,
-                        colors = tonal,
-                        modifier = Modifier.weight(1f).heightIn(min = Orbit.sizing.touchTarget),
-                    ) { Text("Never suggest") }
+                    item(key = "typed-header") {
+                        SectionHeader(
+                            kind = RuleKind.Solid,
+                            icon = Icons.Filled.Rule,
+                            title = "Hard rules",
+                            subtitle = "Always obeyed for $name.",
+                            onInfo = { info = RuleKind.Solid },
+                            modifier = Modifier.padding(top = Orbit.spacing.xl),
+                        )
+                    }
+                    item(key = "typed-add") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm), modifier = Modifier.fillMaxWidth()) {
+                            SolidButton("Pin to slot", Icons.Filled.PushPin, { pending = Pending.AddTyped(TypedRuleType.PIN_TO_SLOT) }, Modifier.weight(1f))
+                            SolidButton("Never suggest", Icons.Filled.VisibilityOff, { actions.addTyped(TypedRuleParams.NeverShow(ref)) }, Modifier.weight(1f))
+                        }
+                    }
+                    if (state.typedRules.isEmpty()) {
+                        item(key = "typed-empty") {
+                            EmptyState(
+                                icon = Icons.Filled.Rule,
+                                title = "No hard rules",
+                                body = "$name orbits freely.",
+                                compact = true,
+                            )
+                        }
+                    }
+                    items(state.typedRules, key = { "t-${it.id}" }) { rule ->
+                        val text = rule.params.describe(name)
+                        RuleRow(
+                            kind = RuleKind.Solid,
+                            icon = if (rule.params is TypedRuleParams.PinToSlot) Icons.Filled.PushPin else Icons.Filled.VisibilityOff,
+                            text = text,
+                            detail = null,
+                            detailIsWarning = false,
+                            onEdit = { pending = Pending.EditTyped(rule) },
+                            onDelete = { pending = Pending.DeleteTyped(rule, text) },
+                        )
+                    }
                 }
-            }
-            if (state.typedRules.isEmpty()) {
-                item(key = "typed-empty") {
-                    EmptyState(
-                        icon = Icons.Filled.Rule,
-                        title = "No hard rules for $name",
-                        body = "Pin $name to a fixed slot, or never suggest them. These are always obeyed.",
-                        compact = true,
-                    )
-                }
-            }
-            items(state.typedRules, key = { "t-${it.id}" }) { rule ->
-                val text = rule.params.describe(name)
-                RuleRow(
-                    icon = if (rule.params is TypedRuleParams.PinToSlot) Icons.Filled.PushPin else Icons.Filled.VisibilityOff,
-                    text = text,
-                    detail = null,
-                    detailIsWarning = false,
-                    containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
-                    accent = MaterialTheme.colorScheme.tertiary,
-                    onEdit = { pending = Pending.EditTyped(rule) },
-                    onDelete = { pending = Pending.DeleteTyped(rule, text) },
-                )
             }
         }
+    }
+
+    info?.let { kind ->
+        InfoDialog(
+            title = if (kind == RuleKind.Soft) "Instructions" else "Hard rules",
+            body = if (kind == RuleKind.Soft) FREE_TEXT_INFO else TYPED_INFO,
+            onDismiss = { info = null },
+        )
     }
 
     when (val action = pending) {

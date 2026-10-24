@@ -1,6 +1,5 @@
 package com.smartdialer.ui.home
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,7 +10,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Contacts
@@ -25,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import com.smartdialer.ui.theme.Orbit
 import com.smartdialer.ui.theme.PillShape
+import com.smartdialer.ui.theme.glassCircle
 
 /** Which of the two runtime permissions the app has, and whether asking again is pointless. */
 data class AccessState(
@@ -56,13 +55,13 @@ fun PermissionPrompt(
         Box(
             modifier = Modifier
                 .size(Orbit.sizing.avatarLarge)
-                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                .glassCircle(strong = true, elevation = Orbit.elevation.medium),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 Icons.Filled.Contacts,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                tint = Orbit.colors.accent,
                 modifier = Modifier.size(Orbit.sizing.emptyStateIcon),
             )
         }

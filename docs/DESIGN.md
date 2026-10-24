@@ -1,106 +1,108 @@
 # Orbit design system
 
-**Direction.** Orbit should feel like a calm ring of people around you, not a spreadsheet. Warm paper-like
-surfaces, soft round shapes and a little depth: the person you most likely want to call sits big and
-nearest the middle, the rest drift outward and get smaller. One indigo accent, a teal for the hard
-rules that are enforced, and a coral for things that need you (a missed call). Motion is quiet and only
-explains what changed.
+**Direction.** Orbit taken literally: a calm, deep space where the people you should call float around
+you. Premium, minimal, a little playful. The person you most likely want to call is a glowing orb in the
+middle; the others drift on faint orbit rings around it, smaller and dimmer the further out they are.
+Dark is the primary design (deep ink with a hint of navy, bright glossy orbs, one aqua-to-azure accent);
+light is its own design (soft off-white with pastel light and pastel orbs), not an inversion. Nothing is
+stock Material: surfaces are frosted glass, type is Outfit, shapes are custom.
 
 Everything is implemented as tokens in `ui/theme`. Screens use `MaterialTheme.colorScheme`,
 `MaterialTheme.typography`, `MaterialTheme.shapes` and `Orbit.*`; they do not hard-code colors, sizes or
-durations.
+durations. Screenshots of both themes are in `docs/design/screenshots/`.
 
 ## Color
 
-Warm neutrals with an indigo accent. Light and dark are separate, hand-tuned palettes (not inversions).
+| Role | Dark | Light |
+|---|---|---|
+| background gradient | `#090E1F` to `#0E1730`, faint stars | `#F7F8FF` to `#ECF1FB`, pastel blobs (lilac, peach, mint) |
+| text | `#EEF2FF` | `#10172E` |
+| secondary text | `#A9B4D0` | `#4A5578` |
+| signature accent | aqua `#5EEAD4` to azure `#4C8DFF` | teal `#14B8A6` to blue `#3B6EF5`; solid `#0F766E` |
+| alert (missed call) | ember `#FF7A59`, ink icon | `#C9361F`, white icon |
+| free-text rules ("soft") | violet `#B5A6FF` | `#6D5BD6` |
+| typed rules ("solid") | teal `#4FE0CF` on `#0F2230` | `#0F766E` on `#E2F3F0` |
+| glass fill / border | white 7-12% / white 30% to 6% | white 66-82% / white to `#C9D2EA` |
 
-| Role | Light | Dark | Use |
-|---|---|---|---|
-| background / surface | `#FBF8F4` | `#14120F` | screens |
-| onBackground | `#1F1B16` | `#EAE2D8` | primary text |
-| onSurfaceVariant | `#52473E` | `#CFC6BA` | secondary text, subtitles |
-| primary | `#4650C8` | `#BFC5FF` | accent, selection ring, links |
-| primaryContainer | `#E1E4FB` | `#32399A` | "why" note, general-instruction button |
-| tertiary / container | `#1F7A6D` / `#D3EDE7` | `#8FD6CB` / `#0F4F46` | typed (enforced) rules |
-| error | `#BA3A3A` | `#FFB4AB` | missed-call badge, destructive actions |
-| alertText (`Orbit.colors`) | `#8F2A2A` | `#FFB4AB` | small alert text such as "Missed" |
-| surfaceContainer… | `#F1EBE4`… | `#211E1A`… | search field, cards, buttons |
+**People palette** (`Orbit.colors.bubbleTones`): Aqua, Sky, Violet, Rose, Amber, Silver. Each orb is a
+gradient from a lighter top to a deeper bottom. Dark orbs are bright with ink initials (at least 5.6:1);
+light orbs are pastel with deep initials (at least 5.3:1). A contact keeps the same tone for good;
+rank never changes the hue.
 
-**Bubble tones** (`Orbit.colors.bubbleTones`): Indigo, Rose, Sage, Amber, Sky, Lilac, Stone. Each has a
-soft fill, a strong fill and an initials color, with at least 5.4:1 contrast in every case. A contact
-keeps the same tone forever. The top two tiers use the strong fill so they stand out slightly; tone never
-encodes priority.
+**Never color alone.** Priority is size, glow and position on the rings. A missed call is a badge icon,
+the word "Missed" and the spoken description. A pinned contact has a pin badge and "pinned" in the
+spoken description. Soft and solid rules differ in shape, icon and label as well as color.
 
-**Never color alone.** Priority is shown by size and depth. A missed call is shown by a badge icon, the
-word "Missed" and the spoken description. A pinned contact has a pin icon and "pinned" in the spoken
-description. Free-text and typed rules differ by label ("Read by the LLM" / "Enforced by code"), icon and
-tint. The selected bubble has a ring and a spoken "Selected".
-
-**Contrast** (checked with a script): all text pairs at least 4.5:1, outline against background at least
-3:1 in dark (3.96:1 in light).
+**Contrast** (checked with a script): all text pairs at least 4.5:1, including the accent, the alert and
+text on the orbs.
 
 ## Typography
 
-System sans-serif (always available, follows the user's font settings), sizes in sp.
+**Outfit** (SIL Open Font License, `docs/licenses/OFL-Outfit.txt`), one variable font file for every
+weight: a geometric, slightly rounded sans. Sizes are in sp.
 
 | Style | Size / line | Weight | Used for |
 |---|---|---|---|
-| headlineSmall | 26 / 32 | SemiBold | contact name on Details |
-| titleLarge | 24 / 30 | SemiBold | screen titles |
-| titleMedium | 16 / 22 | SemiBold | section headers, card titles, top bubble name |
-| titleSmall | 14 / 20 | SemiBold | dialog sub-headings |
-| bodyLarge | 16 / 24 | Regular | lists |
-| bodyMedium | 14 / 21 | Regular | notes, rule text |
-| bodySmall | 12 / 17 | Regular | helper text |
+| headlineSmall | 28 / 34 | Medium | contact name on Details |
+| titleLarge | 28 / 34 | Medium | screen titles |
+| titleMedium | 17 / 24 | SemiBold | section headers, the top bubble's name |
+| titleSmall | 15 / 21 | SemiBold | card titles |
+| bodyLarge / bodyMedium / bodySmall | 16 / 14 / 13 | Regular | lists, notes, subtitles |
 | labelLarge | 14 / 20 | Medium | bubble names, buttons |
-| labelMedium / labelSmall | 12 / 16 | Medium | subtitles, tags, quick-action labels |
+| labelMedium / labelSmall | 12 / 16 | Medium | subtitles, arc labels |
 
-Nothing is below 12sp. At large font scales (130%, 200%):
+Nothing is below 12sp. At large font scales everything grows, except bubble names and subtitles, which
+stop at 150% because they sit under fixed orbs (the full text is in the quick-actions caption and on
+Details). The add field stacks above its send button on large fonts.
 
-- Everything grows with the user's setting, with one deliberate exception: bubble names and subtitles stop
-  growing at 150%, because they sit under fixed-size circles. The full text is always available at any
-  size in the quick-actions card and on the Details screen. Above 130% bubble names may wrap to two lines
-  and labels get 16dp more width.
-- Section headers drop the tag chip under the title, and the add-instruction field stacks above its
-  button, instead of squeezing text into a few characters per line.
-- The search placeholder stays on one line and ellipsizes.
+## Shape, spacing, depth
 
-## Shape, spacing, elevation
+- **Shapes:** `MaterialTheme.shapes` 6 / 10 / 16 / 24 / 32dp, plus `PillShape`, `SoftShape` (26dp, free-text
+  rules) and `CrispShape` (8dp, typed rules).
+- **Spacing:** `Orbit.spacing` 2, 4, 8, 12, 16, 24, 32dp. **Touch targets:** at least 48dp.
+- **Glass:** `Modifier.glass(shape)`: translucent fill, a border that is brighter at the top, a soft
+  shadow. Anything that has text over moving content has an opaque base under the glass.
+- **Depth:** orbs have a soft colored shadow and a glow; the top bubble glows most.
 
-- **Shapes:** 6 / 10 / 16 / 24 / 32dp (`MaterialTheme.shapes`), plus `PillShape`. Cards and the popup use
-  24, rows and inputs 16, tags 10, search field and main button are pills, bubbles are circles.
-- **Spacing:** `Orbit.spacing` 2, 4, 8, 12, 16, 24, 32dp.
-- **Elevation:** `Orbit.elevation` 0, 1, 3, 6, 10dp. Bigger bubbles sit higher (top bubble 6dp, then 3, 2, 1);
-  the popup is the highest thing on screen.
-- **Touch targets:** at least 48dp (`Orbit.sizing.touchTarget`).
+## Home
+
+The field (`OrbitLayout`, pure and unit-tested) puts the top bubble in the middle and the rest on
+concentric elliptical rings, each ring a little smaller. A bubble is placed only where it and its name
+stay on screen and clear of the others; when a ring is full the rest move outward, so the field scrolls
+and loads more rings near its end. The bubbles drift very slowly and the glow breathes.
+
+Controls are minimal: a slim translucent search pill, glass icon buttons (rules, add general
+instruction), a small pulsing dot next to the title while refreshing, and a floating "Open dialer" pill
+(accent gradient in dark, deep navy in light) with a soft glow.
+
+## Quick actions
+
+Tapping a bubble lifts it forward (scale and glow), softly blurs (Android 12+) and darkens the rest, and
+springs the actions out of the bubble onto an arc, one after another. `QuickLayout` (pure, unit-tested)
+chooses where the arc goes: it prefers above the bubble, then turns to the side or below, and rejects any
+position where a button or its label would leave the screen, cover the bubble's name or touch the bubble.
+Labels sit on the outer side of each button; on large fonts only the pressed button shows its label. The
+"why this contact" note is a separate caption pill. "Note" collapses the arc into a floating glass field
+with a send button. A haptic tick on open and on choosing; dismiss by tapping outside or back. The actions
+are a plain list (`quickActionsFor`), so adding a button needs no layout change.
+
+## Rules and Details
+
+Same language: ink background, glass cards, Outfit. The two rule families look different on purpose:
+free-text rules (read by the LLM) are soft and fluid, with round gradient violet-to-aqua cards; typed rules
+(enforced by code) are crisp and solid, with square corners, an opaque fill and a hard teal edge. Sections
+have a one-line subtitle and an info icon that opens the longer explanation. Custom chips and an inline add
+field with a send button replace the stock ones; empty states are short and a little playful.
 
 ## Motion
 
-| Token | Value | Used for |
-|---|---|---|
-| short / medium / long | 120 / 200 / 320 ms | |
-| enter | decelerate (0.05, 0.7, 0.1, 1) | popup opening, bubbles arriving, a screen coming in |
-| exit | accelerate (0.3, 0, 0.8, 0.15), shorter | popup closing, a screen leaving |
-| move | standard (0.2, 0, 0, 1) | selection and size changes |
+Tokens in `Motion`: 120 / 220 / 340 ms; entering things decelerate, leaving things accelerate and are
+quicker; springs for the arc and the lift. Bubbles fade and scale in once, staggered. The drift (18s per
+cycle) and the glow breathing (5s) are ambient and slow. **Reduced motion:** when system animations are
+off, every spec snaps and the drift, breathing and pulse are not run.
 
-- **Bubbles** fade and scale in once, staggered by 30ms (first 8 only). They do not replay when scrolling
-  back or when the list reorders.
-- **Popup:** scales from 92% and fades in over 200ms; leaves in 120ms. The scrim fades with it.
-- **Refresh indicator:** fades in and out in its reserved space, so nothing shifts.
-- **Screens:** a short fade with a small horizontal slide.
-- **Reduced motion:** when system animations are off, every spec snaps (`Motion.reduced`).
+## Notes
 
-## Components
-
-- **Bubble:** circle with photo or initials, tier-sized (120 / 80 / 64 / 56dp), shadow by tier, name and
-  subtitle below, badge top-right, pin marker bottom-right, ring when selected. Faint orbit rings sit
-  behind the top bubble.
-- **Quick-actions card:** 304dp wide, 24dp corners, anchored to the bubble (`PopupPlacement`), actions as
-  tonal 48dp circles with labels under them.
-- **Rule row:** tinted by section (indigo for free-text, teal for typed), leading icon, text, status line,
-  edit and delete.
-- **Empty states:** an icon, a one-line title and a sentence telling the user what to do next.
-
-## Not done yet
-
-A custom typeface (for example a rounded humanist sans) would add warmth; it needs bundling a font file.
+- Dark vs light follows the system setting; dark is the designed-first experience.
+- Background blur needs Android 12 (API 31); on older versions the screen only darkens.
+- Typed rules' "crisp" look is deliberately the most "enforced"-feeling thing in the app.

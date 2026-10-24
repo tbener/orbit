@@ -1,17 +1,16 @@
 package com.smartdialer.ui.preview
 
+import android.content.res.Configuration.UI_MODE_NIGHT_NO
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.smartdialer.data.Contact
 import com.smartdialer.data.ContactSignals
 import com.smartdialer.data.NumberChoice
 import com.smartdialer.data.Suggestion
 import com.smartdialer.data.SuggestionBadge
+import com.smartdialer.ranking.TraceEntry
+import com.smartdialer.ranking.TraceOutcome
 import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.FreeTextRule
 import com.smartdialer.rules.FreeTextStatus
@@ -21,27 +20,20 @@ import com.smartdialer.ui.details.DetailsActions
 import com.smartdialer.ui.details.DetailsScreen
 import com.smartdialer.ui.details.DetailsUiState
 import com.smartdialer.ui.home.AccessState
-import com.smartdialer.ui.home.BubbleTier
-import com.smartdialer.ui.home.ContactBubble
 import com.smartdialer.ui.home.HomeActions
 import com.smartdialer.ui.home.HomeScreen
 import com.smartdialer.ui.home.HomeUiState
-import com.smartdialer.ui.home.QuickActionHandlers
-import com.smartdialer.ui.home.QuickActionsCard
 import com.smartdialer.ui.rules.RulesActions
 import com.smartdialer.ui.rules.RulesScreen
 import com.smartdialer.ui.rules.RulesUiState
-import com.smartdialer.ui.theme.Orbit
 import com.smartdialer.ui.theme.OrbitTheme
-import com.smartdialer.ranking.TraceEntry
-import com.smartdialer.ranking.TraceOutcome
 import kotlinx.coroutines.flow.emptyFlow
 
-/** Light, dark, and two large font sizes: the four ways every screen has to work. */
-@Preview(name = "Light", showBackground = true, widthDp = 360, heightDp = 780)
+/** Dark (the primary design), light, and two large font sizes: the ways every screen has to work. */
 @Preview(name = "Dark", uiMode = UI_MODE_NIGHT_YES, showBackground = true, widthDp = 360, heightDp = 780)
-@Preview(name = "Font 130%", fontScale = 1.3f, showBackground = true, widthDp = 360, heightDp = 780)
-@Preview(name = "Font 200%", fontScale = 2f, showBackground = true, widthDp = 360, heightDp = 780)
+@Preview(name = "Light", uiMode = UI_MODE_NIGHT_NO, showBackground = true, widthDp = 360, heightDp = 780)
+@Preview(name = "Dark font 130%", uiMode = UI_MODE_NIGHT_YES, fontScale = 1.3f, showBackground = true, widthDp = 360, heightDp = 780)
+@Preview(name = "Dark font 200%", uiMode = UI_MODE_NIGHT_YES, fontScale = 2f, showBackground = true, widthDp = 360, heightDp = 780)
 annotation class ThemePreviews
 
 private val names = listOf(
@@ -123,35 +115,7 @@ private fun HomeNeedsPermission() = PreviewHome(homeState(count = 0), AccessStat
 
 @ThemePreviews
 @Composable
-private fun HomeSearchNoResults() = PreviewHome(
-    HomeUiState(query = "zzz"),
-)
-
-@ThemePreviews
-@Composable
-private fun BubbleTiers() {
-    OrbitTheme {
-        Row(Modifier.padding(Orbit.spacing.lg), horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
-            ContactBubble(suggestion(0), rank = 1, tier = BubbleTier.Hero, selected = true, onGesture = null)
-            ContactBubble(suggestion(1), rank = 2, tier = BubbleTier.Flank, selected = false, onGesture = null)
-            ContactBubble(suggestion(3), rank = 4, tier = BubbleTier.Medium, selected = false, onGesture = null)
-        }
-    }
-}
-
-@ThemePreviews
-@Composable
-private fun QuickActions() {
-    OrbitTheme {
-        QuickActionsCard(
-            name = "Dana",
-            reason = "Dana called yesterday and you haven't called back.",
-            handlers = QuickActionHandlers({}, {}, {}, {}, {}),
-            onAct = { it() },
-            modifier = Modifier.padding(Orbit.spacing.lg),
-        )
-    }
-}
+private fun HomeSearchNoResults() = PreviewHome(HomeUiState(query = "zzz"))
 
 private val mom = ContactRef("key-0", "Mom")
 
