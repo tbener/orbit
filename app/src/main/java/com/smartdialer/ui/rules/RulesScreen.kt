@@ -13,23 +13,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,12 +42,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.smartdialer.ranking.TraceEntry
 import com.smartdialer.rules.FreeTextRule
 import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
+import com.smartdialer.ui.components.EmptyState
+import com.smartdialer.ui.theme.Orbit
+import com.smartdialer.ui.theme.PillShape
 
 class RulesActions(
     val addFreeText: (String) -> Unit,
@@ -91,9 +94,10 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Rules", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Rules") },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = {
-                    IconButton(onClick = actions.onBack, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = actions.onBack, modifier = Modifier.size(Orbit.sizing.touchTarget)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -102,11 +106,12 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
     ) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(Orbit.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
         ) {
             item(key = "free-header") {
                 SectionHeader(
+                    icon = Icons.Outlined.ChatBubbleOutline,
                     title = "Free-text rules",
                     tag = "Read by the LLM",
                     description = "Instructions in your own words, general or about one contact. The LLM interprets them and can get exact placement wrong.",
@@ -122,19 +127,38 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                 )
             }
             item(key = "free-filter") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
                     FreeTextFilter.entries.forEach { option ->
                         FilterChip(
                             selected = filter == option,
                             onClick = { filter = option },
                             label = { Text(option.label) },
+                            shape = PillShape,
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            ),
                         )
                     }
                 }
             }
             if (shownFreeText.isEmpty()) {
                 item(key = "free-empty") {
-                    EmptyHint(if (state.freeText.isEmpty()) "No free-text rules yet." else "No free-text rules match this filter.")
+                    if (state.freeText.isEmpty()) {
+                        EmptyState(
+                            icon = Icons.Outlined.ChatBubbleOutline,
+                            title = "No instructions yet",
+                            body = "Write what matters to you, like \"ignore missed calls\" or \"call Mom every 3 days\". Orbit keeps it exactly as you wrote it.",
+                            compact = true,
+                        )
+                    } else {
+                        EmptyState(
+                            icon = Icons.Outlined.ChatBubbleOutline,
+                            title = "Nothing here",
+                            body = "No free-text rules match this filter. Try All.",
+                            compact = true,
+                        )
+                    }
                 }
             }
             items(shownFreeText, key = { "f-${it.id}" }) { rule ->
@@ -161,26 +185,39 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
 
             item(key = "typed-header") {
                 SectionHeader(
+                    icon = Icons.Filled.Rule,
                     title = "Typed rules",
                     tag = "Enforced by code",
                     description = "Hard rules applied after the LLM answers. These are always obeyed.",
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = Orbit.spacing.xl),
                 )
             }
             item(key = "typed-add") {
-                OutlinedButton(
+                FilledTonalButton(
                     onClick = { pending = Pending.AddTyped },
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                    shape = PillShape,
+                    colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    ),
+                    modifier = Modifier.fillMaxWidth().heightIn(min = Orbit.sizing.touchTarget),
                 ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(Orbit.sizing.iconSmall))
+                    Spacer(Modifier.width(Orbit.spacing.sm))
                     Text("Add typed rule")
                 }
             }
             if (state.typed.isEmpty()) {
-                item(key = "typed-empty") { EmptyHint("No typed rules yet.") }
+                item(key = "typed-empty") {
+                    EmptyState(
+                        icon = Icons.Filled.Rule,
+                        title = "No typed rules yet",
+                        body = "Use Add typed rule to pin someone to a fixed spot or keep them out of suggestions. These are always obeyed.",
+                        compact = true,
+                    )
+                }
             }
             items(state.typed, key = { "t-${it.id}" }) { rule ->
                 val ref = rule.params.contact
@@ -199,7 +236,7 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                 )
             }
 
-            item(key = "debug") { DebugTrace(state.trace, modifier = Modifier.padding(top = 16.dp)) }
+            item(key = "debug") { DebugTrace(state.trace, modifier = Modifier.padding(top = Orbit.spacing.xl)) }
         }
     }
 
@@ -237,28 +274,36 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
 
 @Composable
 private fun DebugTrace(trace: List<TraceEntry>, modifier: Modifier = Modifier) {
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
         Text(
             text = "Developer: last enforcement trace",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.semantics { heading() },
         )
         Text(
             text = "What the deterministic layer did with the typed rules the last time the home list was built.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
         )
-        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Surface(
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            shape = MaterialTheme.shapes.medium,
+            modifier = Modifier.fillMaxWidth().padding(top = Orbit.spacing.xs),
+        ) {
+            Column(Modifier.padding(Orbit.spacing.md), verticalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
                 if (trace.isEmpty()) {
-                    Text("No typed rules have been applied yet.", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        "No typed rules have been applied yet.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 trace.forEach { entry ->
                     Text(
                         text = "#${entry.ruleId}  ${entry.outcome}: ${entry.message}",
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontFamily = FontFamily.Monospace,
                     )
                 }

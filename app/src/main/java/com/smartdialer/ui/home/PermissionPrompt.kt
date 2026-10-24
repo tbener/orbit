@@ -1,14 +1,17 @@
 package com.smartdialer.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Contacts
@@ -19,9 +22,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
+import com.smartdialer.ui.theme.Orbit
+import com.smartdialer.ui.theme.PillShape
 
 /** Which of the two runtime permissions the app has, and whether asking again is pointless. */
 data class AccessState(
@@ -46,24 +49,31 @@ fun PermissionPrompt(
     }.joinToString(" and ")
 
     Column(
-        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Orbit.spacing.xl),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            Icons.Filled.Contacts,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(48.dp),
-        )
-        Spacer(Modifier.size(16.dp))
+        Box(
+            modifier = Modifier
+                .size(Orbit.sizing.avatarLarge)
+                .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                Icons.Filled.Contacts,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(Orbit.sizing.emptyStateIcon),
+            )
+        }
+        Spacer(Modifier.height(Orbit.spacing.lg))
         Text(
             text = "Orbit needs your $missing",
             style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.size(8.dp))
+        Spacer(Modifier.height(Orbit.spacing.sm))
         Text(
             text = if (access.needsSettings) {
                 "Access was turned off. Open Orbit's app settings and allow Contacts and Phone (call logs)."
@@ -74,13 +84,13 @@ fun PermissionPrompt(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.size(20.dp))
+        Spacer(Modifier.height(Orbit.spacing.xl))
         Button(
             onClick = if (access.needsSettings) onOpenSettings else onRequest,
-            modifier = Modifier.heightIn(min = 48.dp),
+            shape = PillShape,
+            modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget),
         ) {
-            Text(if (access.needsSettings) "Open settings" else "Allow access")
+            Text(if (access.needsSettings) "Open settings" else "Allow access", style = MaterialTheme.typography.labelLarge)
         }
-        Spacer(Modifier.width(1.dp))
     }
 }

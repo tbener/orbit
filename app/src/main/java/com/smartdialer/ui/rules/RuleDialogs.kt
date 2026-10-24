@@ -36,6 +36,7 @@ import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
 import com.smartdialer.rules.TypedRuleType
 import com.smartdialer.ui.ContactAvatar
+import com.smartdialer.ui.theme.Orbit
 import com.smartdialer.ui.theme.bubbleColorsFor
 
 private const val MAX_SLOT = MAX_SUGGESTIONS
@@ -49,6 +50,7 @@ fun EditFreeTextDialog(
     var text by remember { mutableStateOf(rule.text) }
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.large,
         title = { Text("Edit free-text rule") },
         text = {
             OutlinedTextField(
@@ -63,11 +65,11 @@ fun EditFreeTextDialog(
             TextButton(
                 onClick = { onSave(text.trim()) },
                 enabled = text.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget),
             ) { Text("Save") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") }
         },
     )
 }
@@ -99,10 +101,11 @@ fun TypedRuleDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.large,
         title = { Text(if (initial == null) "Add typed rule" else "Edit typed rule") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
                     FilterChip(
                         selected = type == TypedRuleType.PIN_TO_SLOT,
                         onClick = { type = TypedRuleType.PIN_TO_SLOT },
@@ -117,7 +120,7 @@ fun TypedRuleDialog(
                 if (fixedContact == null) {
                     OutlinedButton(
                         onClick = { picking = true },
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(min = Orbit.sizing.touchTarget),
                     ) {
                         Text(contact?.displayName ?: "Choose contact…")
                     }
@@ -149,11 +152,11 @@ fun TypedRuleDialog(
                     )
                 },
                 enabled = canSave,
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget),
             ) { Text("Save") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") }
         },
     )
 
@@ -180,6 +183,7 @@ private fun ContactPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.large,
         title = { Text("Choose contact") },
         text = {
             if (contacts == null) {
@@ -193,22 +197,22 @@ private fun ContactPickerDialog(
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    LazyColumn(Modifier.heightIn(max = 320.dp).padding(top = 8.dp)) {
+                    LazyColumn(Modifier.heightIn(max = Orbit.sizing.popupWidth).padding(top = Orbit.spacing.sm)) {
                         items(shown, key = { it.id }) { contact ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 56.dp)
+                                    .heightIn(min = Orbit.sizing.touchTarget + Orbit.spacing.sm)
                                     .clickable { onPick(contact) },
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                ContactAvatar(contact, diameter = 40.dp, initialsSp = 15, colors = bubbleColorsFor(contact.id))
-                                Spacer(Modifier.width(12.dp))
+                                ContactAvatar(contact, diameter = Orbit.sizing.avatarMedium - Orbit.spacing.sm, initialsSp = 15, colors = bubbleColorsFor(contact.id))
+                                Spacer(Modifier.width(Orbit.spacing.md))
                                 Text(contact.name, style = MaterialTheme.typography.bodyLarge)
                             }
                         }
                         if (shown.isEmpty()) {
-                            item { Text("No contacts found.", modifier = Modifier.padding(vertical = 12.dp)) }
+                            item { Text("No contacts found.", modifier = Modifier.padding(vertical = Orbit.spacing.md)) }
                         }
                     }
                 }
@@ -216,7 +220,7 @@ private fun ContactPickerDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") }
         },
     )
 }
@@ -229,15 +233,16 @@ fun ConfirmDeleteDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.large,
         title = { Text("Delete this rule?") },
         text = { Text(summary) },
         confirmButton = {
-            TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp)) {
+            TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) {
                 Text("Delete", color = MaterialTheme.colorScheme.error)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") }
         },
     )
 }

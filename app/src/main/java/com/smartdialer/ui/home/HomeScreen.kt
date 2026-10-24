@@ -1,5 +1,7 @@
 package com.smartdialer.ui.home
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -24,12 +26,15 @@ import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -47,9 +52,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -58,7 +67,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Contact
 import com.smartdialer.data.NumberChoice
@@ -66,6 +75,9 @@ import com.smartdialer.data.Suggestion
 import com.smartdialer.ui.CollectUserMessages
 import com.smartdialer.ui.ContactAvatar
 import com.smartdialer.ui.UserMessage
+import com.smartdialer.ui.components.EmptyState
+import com.smartdialer.ui.theme.Orbit
+import com.smartdialer.ui.theme.PillShape
 import com.smartdialer.ui.theme.bubbleColorsFor
 import kotlinx.coroutines.flow.Flow
 
@@ -142,11 +154,19 @@ fun HomeScreen(
             Column(Modifier.padding(padding).fillMaxSize()) {
                 HomeHeader(onOpenRules)
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = Orbit.spacing.lg),
+                    horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     SearchField(state.query, onQueryChange, Modifier.weight(1f))
-                    IconButton(onClick = { showGeneralSheet = true }, modifier = Modifier.size(48.dp)) {
+                    FilledTonalIconButton(
+                        onClick = { showGeneralSheet = true },
+                        modifier = Modifier.size(SEARCH_HEIGHT),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        ),
+                    ) {
                         Icon(Icons.Filled.EditNote, contentDescription = "Add general instruction")
                     }
                 }
@@ -195,19 +215,31 @@ fun HomeScreen(
     }
 }
 
+private val SEARCH_HEIGHT = Orbit.sizing.touchTarget + Orbit.spacing.sm
+
+/** Space above the top bubble so the outer orbit ring is not cut off by the top of the list. */
+private val RING_ROOM = Orbit.spacing.xxl + Orbit.spacing.md
+
 @Composable
 private fun HomeHeader(onOpenRules: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = Orbit.spacing.xl, end = Orbit.spacing.lg, top = Orbit.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = "Who to call",
             style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.weight(1f).semantics { heading() },
         )
-        IconButton(onClick = onOpenRules, modifier = Modifier.size(48.dp)) {
+        FilledTonalIconButton(
+            onClick = onOpenRules,
+            modifier = Modifier.size(Orbit.sizing.touchTarget),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            ),
+        ) {
             Icon(Icons.Filled.Tune, contentDescription = "Open rules")
         }
     }
@@ -219,8 +251,8 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
     TextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = modifier.padding(vertical = 8.dp).heightIn(min = 56.dp),
-        placeholder = { Text("Search all contacts") },
+        modifier = modifier.padding(vertical = Orbit.spacing.sm).heightIn(min = SEARCH_HEIGHT),
+        placeholder = { Text("Search all contacts", maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
         trailingIcon = if (query.isNotEmpty()) {
             {
@@ -232,12 +264,14 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit, modifier
             null
         },
         singleLine = true,
-        shape = RoundedCornerShape(16.dp),
+        shape = PillShape,
         colors = TextFieldDefaults.colors(
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            focusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            unfocusedPlaceholderColor = MaterialTheme.colorScheme.onSurfaceVariant,
         ),
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
@@ -263,28 +297,46 @@ private fun BubbleList(
         if (nearEnd && state.canLoadMore) onLoadMore()
     }
 
+    // Bubbles animate in once; scrolling back or reordering does not replay it.
+    val seen = remember { mutableSetOf<String>() }
+
     val items = state.suggestions
     val indexed = items.withIndex().toList()
     val hero = indexed.getOrNull(0)
     val flanks = indexed.drop(1).take(2)
     val rest = indexed.drop(3)
+    val ringColor = Orbit.colors.orbitRing
+    val heroRadius = BubbleTier.Hero.diameter / 2
 
     LazyColumn(
         state = listState,
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.sm),
+        verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
     ) {
         if (hero != null) {
             item(key = "hero") {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
-                    verticalAlignment = Alignment.Bottom,
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Two faint rings around the top bubble: the "orbit" the others sit on.
+                        .drawBehind {
+                            val center = Offset(size.width / 2f, (RING_ROOM + Orbit.spacing.xs + heroRadius).toPx())
+                            listOf(heroRadius + Orbit.spacing.xl, heroRadius + Orbit.spacing.xl + Orbit.spacing.xxl).forEach { radius ->
+                                drawCircle(ringColor, radius = radius.toPx(), center = center, style = Stroke(width = 1.dp.toPx()))
+                            }
+                        }
+                        .padding(top = RING_ROOM),
                 ) {
-                    flanks.getOrNull(0)?.let { Bubble(it, BubbleTier.Flank, state, onGesture) }
-                    Bubble(hero, BubbleTier.Hero, state, onGesture)
-                    flanks.getOrNull(1)?.let { Bubble(it, BubbleTier.Flank, state, onGesture) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.xs, Alignment.CenterHorizontally),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        flanks.getOrNull(0)?.let { Bubble(it, BubbleTier.Flank, state, onGesture, seen) }
+                        Bubble(hero, BubbleTier.Hero, state, onGesture, seen)
+                        flanks.getOrNull(1)?.let { Bubble(it, BubbleTier.Flank, state, onGesture, seen) }
+                    }
                 }
             }
         }
@@ -292,24 +344,23 @@ private fun BubbleList(
             val firstRow = row.first().index < 3 + SMALL_ROW_SIZE
             val tier = if (firstRow) BubbleTier.Medium else BubbleTier.Small
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                row.forEach { entry -> Bubble(entry, tier, state, onGesture, Modifier.weight(1f)) }
+                row.forEach { entry -> Bubble(entry, tier, state, onGesture, seen, Modifier.weight(1f)) }
                 // Keep an incomplete last row aligned to the grid.
                 repeat(SMALL_ROW_SIZE - row.size) { Spacer(Modifier.weight(1f)) }
             }
         }
         if (items.isEmpty()) {
             item(key = "empty") {
-                Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
-                    if (state.isRefreshing) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text(
-                            text = "No suggestions yet. Once you have call history with your contacts, they will show up here.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
+                if (state.isRefreshing) {
+                    Box(Modifier.fillMaxWidth().padding(Orbit.spacing.xl), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(modifier = Modifier.size(Orbit.sizing.icon), strokeWidth = 2.dp)
                     }
+                } else {
+                    EmptyState(
+                        icon = Icons.Outlined.Groups,
+                        title = "No suggestions yet",
+                        body = "Orbit suggests people from your call history. Once you have made or missed some calls with your contacts, they will show up here.",
+                    )
                 }
             }
         }
@@ -322,44 +373,46 @@ private fun Bubble(
     tier: BubbleTier,
     state: HomeUiState,
     onGesture: BubbleGestureHandler,
+    seen: MutableSet<String>,
     modifier: Modifier = Modifier,
 ) {
+    val id = entry.value.contact.id
+    val firstTime = remember(id) { seen.add(id) }
     ContactBubble(
         suggestion = entry.value,
         rank = entry.index + 1,
         tier = tier,
-        selected = state.selectedId == entry.value.contact.id,
+        selected = state.selectedId == id,
         onGesture = { gesture, bounds -> onGesture(entry, tier, gesture, bounds) },
-        modifier = modifier,
+        modifier = modifier.bubbleEntrance(play = firstTime, index = entry.index),
     )
 }
 
 @Composable
 private fun SearchResults(query: String, results: List<Contact>) {
     if (results.isEmpty()) {
-        Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.TopCenter) {
-            Text(
-                text = "No contacts match \"${query.trim()}\"",
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        EmptyState(
+            icon = Icons.Filled.Search,
+            title = "No contacts match \"${query.trim()}\"",
+            body = "Search looks through all of your contacts by name or phone number.",
+            modifier = Modifier.padding(top = Orbit.spacing.xl),
+        )
         return
     }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = 4.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(vertical = Orbit.spacing.xs)) {
         items(results, key = { it.id }) { contact ->
             val colors = bubbleColorsFor(contact.id)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 64.dp)
-                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .heightIn(min = Orbit.sizing.touchTarget + Orbit.spacing.lg)
+                    .padding(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.sm)
                     .semantics(mergeDescendants = true) {},
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                ContactAvatar(contact, diameter = 48.dp, initialsSp = 18, colors = colors)
-                Spacer(Modifier.width(16.dp))
-                Text(contact.name, style = MaterialTheme.typography.bodyLarge)
+                ContactAvatar(contact, diameter = Orbit.sizing.avatarMedium, initialsSp = 18, colors = colors)
+                Spacer(Modifier.width(Orbit.spacing.lg))
+                Text(contact.name, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
             }
         }
     }
@@ -372,7 +425,7 @@ private fun BottomPanel(
     onOpenDialer: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.sm),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (showSuggestionInfo) {
@@ -387,14 +440,22 @@ private fun BottomPanel(
                 WhyCard(title = title, reason = selected.reason)
             }
             // Fixed height so the indicator appearing does not shift the layout.
-            Box(Modifier.heightIn(min = 36.dp), contentAlignment = Alignment.Center) {
-                if (state.isRefreshing) {
+            val motion = Orbit.motion
+            val indicatorAlpha by animateFloatAsState(
+                targetValue = if (state.isRefreshing) 1f else 0f,
+                animationSpec = if (state.isRefreshing) motion.enter() else motion.exit(),
+                label = "refreshIndicator",
+            )
+            Box(Modifier.heightIn(min = Orbit.sizing.touchTarget - Orbit.spacing.md), contentAlignment = Alignment.Center) {
+                if (indicatorAlpha > 0f) {
                     Row(
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        modifier = Modifier
+                            .graphicsLayer { alpha = indicatorAlpha }
+                            .semantics { liveRegion = LiveRegionMode.Polite },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
+                        CircularProgressIndicator(modifier = Modifier.size(Orbit.spacing.lg), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(Orbit.spacing.sm))
                         Text(
                             text = "Updating suggestions…",
                             style = MaterialTheme.typography.bodySmall,
@@ -406,15 +467,17 @@ private fun BottomPanel(
         }
         Button(
             onClick = onOpenDialer,
-            modifier = Modifier.heightIn(min = 56.dp),
+            modifier = Modifier.heightIn(min = SEARCH_HEIGHT),
+            shape = PillShape,
             colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.onBackground,
-                contentColor = MaterialTheme.colorScheme.background,
+                containerColor = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
             ),
+            elevation = ButtonDefaults.buttonElevation(defaultElevation = Orbit.elevation.medium),
         ) {
-            Icon(Icons.Filled.Dialpad, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Open dialer", fontWeight = FontWeight.SemiBold)
+            Icon(Icons.Filled.Dialpad, contentDescription = null, modifier = Modifier.size(Orbit.sizing.iconSmall + 2.dp))
+            Spacer(Modifier.width(Orbit.spacing.sm))
+            Text("Open dialer", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
         }
     }
 }
@@ -424,17 +487,24 @@ private fun WhyCard(title: String, reason: String) {
     Surface(
         color = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shape = RoundedCornerShape(12.dp),
+        shape = MaterialTheme.shapes.large,
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 76.dp)
+            .heightIn(min = Orbit.sizing.avatarLarge - Orbit.spacing.md)
             .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
     ) {
-        Row(Modifier.padding(16.dp)) {
-            Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(12.dp))
+        Row(Modifier.padding(Orbit.spacing.lg)) {
+            Box(
+                modifier = Modifier
+                    .size(Orbit.sizing.icon + Orbit.spacing.sm)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Outlined.Info, contentDescription = null, modifier = Modifier.size(Orbit.sizing.iconSmall + 2.dp))
+            }
+            Spacer(Modifier.width(Orbit.spacing.md))
             Column {
-                Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                Text(title, style = MaterialTheme.typography.titleSmall)
                 Text(reason, style = MaterialTheme.typography.bodyMedium)
             }
         }

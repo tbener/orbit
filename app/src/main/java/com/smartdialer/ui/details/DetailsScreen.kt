@@ -13,23 +13,26 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -40,7 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import com.smartdialer.data.Contact
 import com.smartdialer.data.SignalSummary
 import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.FreeTextRule
@@ -50,15 +53,17 @@ import com.smartdialer.rules.TypedRuleType
 import com.smartdialer.ui.CollectUserMessages
 import com.smartdialer.ui.ContactAvatar
 import com.smartdialer.ui.UserMessage
+import com.smartdialer.ui.components.EmptyState
 import com.smartdialer.ui.rules.AddFreeTextRow
 import com.smartdialer.ui.rules.ConfirmDeleteDialog
 import com.smartdialer.ui.rules.EditFreeTextDialog
-import com.smartdialer.ui.rules.EmptyHint
 import com.smartdialer.ui.rules.RuleRow
 import com.smartdialer.ui.rules.SectionHeader
 import com.smartdialer.ui.rules.TypedRuleDialog
 import com.smartdialer.ui.rules.describe
 import com.smartdialer.ui.rules.label
+import com.smartdialer.ui.theme.Orbit
+import com.smartdialer.ui.theme.PillShape
 import com.smartdialer.ui.theme.bubbleColorsFor
 import kotlinx.coroutines.flow.Flow
 
@@ -102,9 +107,10 @@ fun DetailsScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Details", fontWeight = FontWeight.SemiBold) },
+                title = { Text("Details") },
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 navigationIcon = {
-                    IconButton(onClick = actions.onBack, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = actions.onBack, modifier = Modifier.size(Orbit.sizing.touchTarget)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -113,35 +119,32 @@ fun DetailsScreen(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding).fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(Orbit.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
         ) {
             item(key = "header") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    val contact = state.contact
-                    if (contact != null) {
-                        ContactAvatar(contact, diameter = 72.dp, initialsSp = 26, colors = bubbleColorsFor(contact.id))
-                    } else {
-                        ContactAvatar(
-                            com.smartdialer.data.Contact(state.contactKey, name),
-                            diameter = 72.dp,
-                            initialsSp = 26,
-                            colors = bubbleColorsFor(state.contactKey),
-                        )
-                    }
-                    Spacer(Modifier.width(16.dp))
-                    Column {
+                    val contact = state.contact ?: Contact(state.contactKey, name)
+                    ContactAvatar(
+                        contact = contact,
+                        diameter = Orbit.sizing.avatarLarge,
+                        initialsSp = 30,
+                        colors = bubbleColorsFor(contact.id, strong = true),
+                        elevation = Orbit.elevation.medium,
+                    )
+                    Spacer(Modifier.width(Orbit.spacing.lg))
+                    Column(verticalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
                         Text(
                             text = name,
                             style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onBackground,
                             modifier = Modifier.semantics { heading() },
                         )
                         if (notFound) {
                             Text(
                                 text = "Contact not found. Rules below are skipped until the contact is back.",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
+                                color = Orbit.colors.alertText,
                                 fontWeight = FontWeight.SemiBold,
                             )
                         }
@@ -150,14 +153,23 @@ fun DetailsScreen(
             }
             item(key = "summary") {
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainer,
+                    shape = MaterialTheme.shapes.large,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("Recent activity", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+                    Column(Modifier.padding(Orbit.spacing.lg), verticalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Outlined.History,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(Orbit.sizing.iconSmall),
+                            )
+                            Spacer(Modifier.width(Orbit.spacing.sm))
+                            Text("Recent activity", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+                        }
                         SignalSummary.lines(name, state.signals, nowMillis).forEach {
-                            Text(it, style = MaterialTheme.typography.bodyMedium)
+                            Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -165,12 +177,13 @@ fun DetailsScreen(
 
             item(key = "instructions-header") {
                 SectionHeader(
+                    icon = Icons.Outlined.ChatBubbleOutline,
                     title = "Instructions for $name",
                     tag = "Read by the LLM",
                     description = "In your own words. Only used for this contact.",
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = Orbit.spacing.sm),
                 )
             }
             item(key = "instructions-add") {
@@ -181,7 +194,14 @@ fun DetailsScreen(
                 )
             }
             if (state.instructions.isEmpty()) {
-                item(key = "instructions-empty") { EmptyHint("No instructions about $name yet.") }
+                item(key = "instructions-empty") {
+                    EmptyState(
+                        icon = Icons.Outlined.ChatBubbleOutline,
+                        title = "No instructions about $name",
+                        body = "Add things like \"only call after 6pm\". Orbit keeps them with $name and reads them when ranking.",
+                        compact = true,
+                    )
+                }
             }
             items(state.instructions, key = { "i-${it.id}" }) { rule ->
                 RuleRow(
@@ -198,28 +218,44 @@ fun DetailsScreen(
 
             item(key = "typed-header") {
                 SectionHeader(
+                    icon = Icons.Filled.Rule,
                     title = "Typed rules for $name",
                     tag = "Enforced by code",
                     description = "Hard rules applied after the LLM answers.",
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = Orbit.spacing.xl),
                 )
             }
             item(key = "typed-add") {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
+                val tonal = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
+                    FilledTonalButton(
                         onClick = { pending = Pending.AddTyped(TypedRuleType.PIN_TO_SLOT) },
-                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        shape = PillShape,
+                        colors = tonal,
+                        modifier = Modifier.weight(1f).heightIn(min = Orbit.sizing.touchTarget),
                     ) { Text("Pin to slot…") }
-                    OutlinedButton(
+                    FilledTonalButton(
                         onClick = { actions.addTyped(TypedRuleParams.NeverShow(ref)) },
-                        modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                        shape = PillShape,
+                        colors = tonal,
+                        modifier = Modifier.weight(1f).heightIn(min = Orbit.sizing.touchTarget),
                     ) { Text("Never suggest") }
                 }
             }
             if (state.typedRules.isEmpty()) {
-                item(key = "typed-empty") { EmptyHint("No typed rules for $name yet.") }
+                item(key = "typed-empty") {
+                    EmptyState(
+                        icon = Icons.Filled.Rule,
+                        title = "No hard rules for $name",
+                        body = "Pin $name to a fixed slot, or never suggest them. These are always obeyed.",
+                        compact = true,
+                    )
+                }
             }
             items(state.typedRules, key = { "t-${it.id}" }) { rule ->
                 val text = rule.params.describe(name)

@@ -10,15 +10,20 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.smartdialer.data.Contact
 import com.smartdialer.ui.theme.BubbleColors
 
-/** A circle with the contact's photo, or their initials when there is no photo (or it fails to load). */
+/**
+ * A circle with the contact's photo, or their initials when there is no photo (or it fails to load).
+ * [elevation] gives it a soft shadow.
+ */
 @Composable
 fun ContactAvatar(
     contact: Contact,
@@ -26,10 +31,12 @@ fun ContactAvatar(
     initialsSp: Int,
     colors: BubbleColors,
     modifier: Modifier = Modifier,
+    elevation: Dp = 0.dp,
 ) {
     Box(
         modifier = modifier
             .size(diameter)
+            .shadow(elevation, CircleShape, clip = false)
             .clip(CircleShape)
             .background(colors.container),
         contentAlignment = Alignment.Center,
@@ -38,7 +45,8 @@ fun ContactAvatar(
             text = initialsOf(contact.name),
             color = colors.content,
             fontSize = initialsSp.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = 0.5.sp,
         )
         if (contact.photoUri != null) {
             AsyncImage(

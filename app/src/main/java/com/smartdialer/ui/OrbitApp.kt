@@ -9,6 +9,12 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -38,6 +44,7 @@ import com.smartdialer.ui.home.HomeViewModel
 import com.smartdialer.ui.rules.RulesActions
 import com.smartdialer.ui.rules.RulesScreen
 import com.smartdialer.ui.rules.RulesViewModel
+import com.smartdialer.ui.theme.Orbit
 
 private enum class Screen { Home, Rules, Details }
 
@@ -92,7 +99,18 @@ fun OrbitApp() {
         )
     }
 
-    when (screen) {
+    // A short fade with a small slide, only to show that the screen changed. Snaps when animations are off.
+    val motion = Orbit.motion
+    AnimatedContent(
+        targetState = screen,
+        transitionSpec = {
+            (fadeIn(motion.enter(delayMillis = motion.shortMillis / 2)) +
+                slideInHorizontally(motion.enter()) { if (targetState == Screen.Home) -it / 12 else it / 12 }) togetherWith
+                fadeOut(motion.exit())
+        },
+        label = "screen",
+    ) { current ->
+    when (current) {
         Screen.Home -> {
             val state by homeViewModel.state.collectAsStateWithLifecycle()
             HomeScreen(
@@ -164,6 +182,7 @@ fun OrbitApp() {
                 ),
             )
         }
+    }
     }
 }
 

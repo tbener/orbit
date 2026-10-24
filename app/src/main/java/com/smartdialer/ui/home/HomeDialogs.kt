@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -27,10 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Contact
+import com.smartdialer.ui.theme.Orbit
+import com.smartdialer.ui.theme.PillShape
 
 enum class NumberPurpose(val verb: String) {
     Call("Call"),
@@ -48,14 +48,15 @@ fun NumberPickerDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("${pick.purpose.verb} ${pick.contact.name}: which number?") },
+        shape = MaterialTheme.shapes.large,
+        title = { Text("${pick.purpose.verb} ${pick.contact.name}: which number?", style = MaterialTheme.typography.titleMedium) },
         text = {
             Column {
                 pick.candidates.forEach { number ->
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 56.dp)
+                            .heightIn(min = Orbit.sizing.touchTarget + Orbit.spacing.sm)
                             .clickable { onPick(number) },
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -66,7 +67,7 @@ fun NumberPickerDialog(
         },
         confirmButton = {},
         dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") }
         },
     )
 }
@@ -82,12 +83,20 @@ fun GeneralInstructionSheet(
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
         Column(
-            modifier = Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 24.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .imePadding()
+                .navigationBarsPadding()
+                .padding(horizontal = Orbit.spacing.xl, vertical = Orbit.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
         ) {
-            Text("Add general instruction", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Text("Add general instruction", style = MaterialTheme.typography.titleLarge)
             Text(
                 text = "This applies to all contacts, for example \"ignore missed calls\". It is saved as an unclassified instruction; classification arrives in a later stage. You can edit or delete it on the Rules page.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -98,14 +107,16 @@ fun GeneralInstructionSheet(
                 onValueChange = { text = it },
                 label = { Text("Instruction") },
                 minLines = 3,
+                shape = MaterialTheme.shapes.medium,
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
+                TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") }
                 Button(
                     onClick = { onSave(text.trim()) },
                     enabled = text.isNotBlank(),
-                    modifier = Modifier.heightIn(min = 48.dp),
+                    shape = PillShape,
+                    modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget),
                 ) { Text("Save") }
             }
         }
