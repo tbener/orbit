@@ -162,7 +162,7 @@ class RuleDaoTest {
         repo.deleteTypedRule(typedId)
 
         val free = repo.freeTextRules.first().single()
-        assertEquals(FreeTextStatus.UNCLASSIFIED, free.status)
+        assertEquals(FreeTextStatus.SOFT, free.status)
         assertNull(free.typedRuleId)
     }
 

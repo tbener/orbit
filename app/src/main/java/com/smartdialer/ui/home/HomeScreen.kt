@@ -28,6 +28,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.EditNote
@@ -105,6 +107,7 @@ fun HomeScreen(
     onSelect: (String) -> Unit,
     onLoadMore: () -> Unit,
     onOpenRules: () -> Unit,
+    onOpenAiSettings: () -> Unit,
     onOpenDialer: () -> Unit,
     access: AccessState,
     onRequestAccess: () -> Unit,
@@ -164,7 +167,12 @@ fun HomeScreen(
             ) { padding ->
                 Box(Modifier.padding(padding).fillMaxSize()) {
                     Column(Modifier.fillMaxSize()) {
-                        HomeHeader(isRefreshing = state.isRefreshing, onOpenRules = onOpenRules)
+                        HomeHeader(
+                            isRefreshing = state.isRefreshing,
+                            aiProblem = state.aiProblem,
+                            onOpenRules = onOpenRules,
+                            onOpenAiSettings = onOpenAiSettings,
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = Orbit.spacing.lg),
                             horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
@@ -249,7 +257,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun HomeHeader(isRefreshing: Boolean, onOpenRules: () -> Unit) {
+private fun HomeHeader(isRefreshing: Boolean, aiProblem: Boolean, onOpenRules: () -> Unit, onOpenAiSettings: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(start = Orbit.spacing.xl, end = Orbit.spacing.lg, top = Orbit.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
@@ -261,7 +269,26 @@ private fun HomeHeader(isRefreshing: Boolean, onOpenRules: () -> Unit) {
             modifier = Modifier.semantics { heading() },
         )
         UpdatingPulse(active = isRefreshing, modifier = Modifier.padding(start = Orbit.spacing.md))
+        if (aiProblem && !isRefreshing) {
+            // A quiet note, not an alert: the last good suggestions are still on screen. Tapping opens Settings.
+            Box(
+                Modifier
+                    .size(Orbit.sizing.touchTarget)
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onOpenAiSettings)
+                    .semantics { contentDescription = "Suggestions could not be updated. Showing the last good result. Open settings." },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Filled.CloudOff, contentDescription = null, tint = Orbit.colors.alertText, modifier = Modifier.size(Orbit.sizing.iconSmall))
+            }
+        }
         Spacer(Modifier.weight(1f))
+        GlassIconButton(
+            icon = Icons.Filled.Settings,
+            description = "Open settings",
+            onClick = onOpenAiSettings,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.width(Orbit.spacing.sm))
         GlassIconButton(
             icon = Icons.Filled.Tune,
             description = "Open rules",

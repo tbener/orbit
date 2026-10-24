@@ -62,9 +62,10 @@ import com.smartdialer.ui.theme.glass
 internal enum class RuleKind { Soft, Solid }
 
 internal fun FreeTextStatus.label(): String = when (this) {
-    FreeTextStatus.UNCLASSIFIED -> "Unclassified"
+    FreeTextStatus.UNCLASSIFIED -> "Waiting to be classified"
     FreeTextStatus.SOFT -> "Soft preference"
-    FreeTextStatus.CONVERTED_TO_TYPED -> "Converted to a typed rule"
+    FreeTextStatus.CONVERTED_TO_TYPED -> "Hard rule"
+    FreeTextStatus.NEEDS_REVIEW -> "Needs your review"
 }
 
 internal fun TypedRuleParams.describe(name: String): String = when (this) {
@@ -73,9 +74,11 @@ internal fun TypedRuleParams.describe(name: String): String = when (this) {
 }
 
 internal const val FREE_TEXT_INFO =
-    "Free-text rules are instructions in your own words, general or about one contact. The LLM reads them " +
-        "and interprets them, so it can get exact placement wrong. New ones are saved as unclassified; " +
-        "classification into soft preferences and typed rules arrives in a later stage."
+    "Free-text rules are instructions in your own words, general or about one contact. A new one is classified " +
+        "by the LLM: a soft preference (the LLM weighs it when ranking, so it can get exact placement wrong) or a " +
+        "hard rule (pin a contact to a slot, or never show them), which becomes a typed rule that code enforces. " +
+        "Each rule shows how it was classified and why, and you can always change it: make a soft rule hard, make " +
+        "a hard rule soft again, or delete either one."
 
 internal const val TYPED_INFO =
     "Typed rules are hard rules, enforced by code after the LLM answers: pin a contact to a slot, or never " +
@@ -192,6 +195,10 @@ internal fun RuleRow(
     detailIsWarning: Boolean,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
+    /** How the LLM classified the rule and why, in one sentence. */
+    explanation: String? = null,
+    /** Buttons under the text, such as "Make hard". */
+    footer: (@Composable () -> Unit)? = null,
 ) {
     val colors = Orbit.colors
     val soft = kind == RuleKind.Soft
@@ -238,9 +245,33 @@ internal fun RuleRow(
                     fontWeight = if (detailIsWarning) FontWeight.SemiBold else null,
                 )
             }
+            if (explanation != null) {
+                Text(
+                    text = explanation,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+            footer?.invoke()
         }
         RowIconButton(Icons.Filled.Edit, "Edit rule: $text", onEdit)
         RowIconButton(Icons.Filled.Delete, "Delete rule: $text", onDelete)
+    }
+}
+
+/** A small text action under a rule, such as "Make hard". At least 48dp tall. */
+@Composable
+internal fun RuleActionButton(label: String, kind: RuleKind, onClick: () -> Unit) {
+    val accent = if (kind == RuleKind.Soft) Orbit.colors.softAccent else Orbit.colors.solidAccent
+    Box(
+        modifier = Modifier
+            .heightIn(min = Orbit.sizing.touchTarget)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = Orbit.spacing.sm),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelLarge, color = accent, fontWeight = FontWeight.SemiBold)
     }
 }
 

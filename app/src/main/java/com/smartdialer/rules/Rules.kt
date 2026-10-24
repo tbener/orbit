@@ -4,8 +4,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/** Where a free-text rule stands in the classification process (classification itself arrives in stage 4). */
-enum class FreeTextStatus { UNCLASSIFIED, SOFT, CONVERTED_TO_TYPED }
+/**
+ * Where a free-text rule stands in classification.
+ * - [UNCLASSIFIED]: not classified yet (waiting for the LLM, or the AI is off).
+ * - [SOFT]: a preference the LLM reads when ranking; code does not enforce it.
+ * - [CONVERTED_TO_TYPED]: it became a typed rule, which code enforces.
+ * - [NEEDS_REVIEW]: it looks like a hard rule but the contact is unclear; the user has to pick one.
+ */
+enum class FreeTextStatus { UNCLASSIFIED, SOFT, CONVERTED_TO_TYPED, NEEDS_REVIEW }
 
 /** A rule written in natural language. Interpreted by the LLM; never enforced by code. */
 data class FreeTextRule(
@@ -17,6 +23,11 @@ data class FreeTextRule(
     val typedRuleId: Long?,
     /** The contact (lookup key) this rule is about. Null means a general instruction for all contacts. */
     val contactKey: String? = null,
+    /** One plain sentence saying how the rule was classified and why (shown to the user). Null before classification. */
+    val explanation: String? = null,
+    /** For [FreeTextStatus.NEEDS_REVIEW]: the kind of typed rule the model proposed, so the form can be pre-filled. */
+    val proposedType: TypedRuleType? = null,
+    val proposedSlot: Int? = null,
 )
 
 /**

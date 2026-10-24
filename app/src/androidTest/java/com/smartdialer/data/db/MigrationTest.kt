@@ -76,7 +76,7 @@ class MigrationTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.databaseBuilder(context, OrbitDatabase::class.java, dbName)
-            .addMigrations(OrbitDatabase.MIGRATION_1_2)
+            .addMigrations(OrbitDatabase.MIGRATION_1_2, OrbitDatabase.MIGRATION_2_3)
             .build()
         try {
             val repo = RoomRulesRepository(db)

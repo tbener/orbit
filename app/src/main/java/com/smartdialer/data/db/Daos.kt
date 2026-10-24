@@ -16,18 +16,39 @@ interface FreeTextRuleDao {
     @Insert
     suspend fun insert(rule: FreeTextRuleEntity): Long
 
-    @Query("UPDATE free_text_rules SET text = :text WHERE id = :id")
+    /** Editing a soft or unclear rule sends it back for classification; a converted rule keeps its typed rule. */
+    @Query(
+        "UPDATE free_text_rules SET text = :text, " +
+            "status = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW') THEN 'UNCLASSIFIED' ELSE status END, " +
+            "explanation = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW') THEN NULL ELSE explanation END, " +
+            "proposedType = NULL, proposedSlot = NULL WHERE id = :id",
+    )
     suspend fun updateText(id: Long, text: String)
+
+    @Query("UPDATE free_text_rules SET status = :status, explanation = :explanation, proposedType = :proposedType, proposedSlot = :proposedSlot WHERE id = :id")
+    suspend fun setClassification(
+        id: Long,
+        status: com.smartdialer.rules.FreeTextStatus,
+        explanation: String?,
+        proposedType: com.smartdialer.rules.TypedRuleType?,
+        proposedSlot: Int?,
+    )
 
     @Query("DELETE FROM free_text_rules WHERE id = :id")
     suspend fun delete(id: Long)
 
-    @Query("UPDATE free_text_rules SET status = 'CONVERTED_TO_TYPED', typedRuleId = :typedRuleId WHERE id = :id")
-    suspend fun markConverted(id: Long, typedRuleId: Long)
+    @Query(
+        "UPDATE free_text_rules SET status = 'CONVERTED_TO_TYPED', typedRuleId = :typedRuleId, explanation = :explanation, " +
+            "proposedType = NULL, proposedSlot = NULL WHERE id = :id",
+    )
+    suspend fun markConverted(id: Long, typedRuleId: Long, explanation: String)
 
-    /** Called when the typed rule [typedRuleId] is deleted: its source rule goes back to unclassified. */
-    @Query("UPDATE free_text_rules SET status = 'UNCLASSIFIED', typedRuleId = NULL WHERE typedRuleId = :typedRuleId")
-    suspend fun detachFromTyped(typedRuleId: Long)
+    /** Called when the typed rule [typedRuleId] is deleted: its source rule goes back to being a soft instruction. */
+    @Query(
+        "UPDATE free_text_rules SET status = 'SOFT', typedRuleId = NULL, explanation = :explanation " +
+            "WHERE typedRuleId = :typedRuleId",
+    )
+    suspend fun detachFromTyped(typedRuleId: Long, explanation: String)
 }
 
 @Dao
@@ -50,4 +71,28 @@ interface TypedRuleDao {
     /** Called when the free-text rule [freeTextRuleId] is deleted: typed rules it produced are kept, unlinked. */
     @Query("UPDATE typed_rules SET sourceFreeTextRuleId = NULL WHERE sourceFreeTextRuleId = :freeTextRuleId")
     suspend fun clearSource(freeTextRuleId: Long)
+}
+
+@Dao
+interface RankingCacheDao {
+    @Query("SELECT * FROM ranking_cache ORDER BY rank")
+    fun observe(): Flow<List<RankingCacheEntity>>
+
+    @Query("SELECT * FROM ranking_cache ORDER BY rank")
+    suspend fun load(): List<RankingCacheEntity>
+
+    @Query("DELETE FROM ranking_cache")
+    suspend fun clear()
+
+    @Insert
+    suspend fun insertAll(rows: List<RankingCacheEntity>)
+}
+
+@Dao
+interface LlmExchangeDao {
+    @Query("SELECT * FROM llm_exchanges WHERE purpose = :purpose")
+    fun observe(purpose: String): Flow<LlmExchangeEntity?>
+
+    @androidx.room.Upsert
+    suspend fun upsert(exchange: LlmExchangeEntity)
 }

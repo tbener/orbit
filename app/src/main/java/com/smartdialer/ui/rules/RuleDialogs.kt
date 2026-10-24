@@ -92,11 +92,12 @@ fun TypedRuleDialog(
     onSave: (TypedRuleParams) -> Unit,
     fixedContact: ContactRef? = null,
     initialType: TypedRuleType? = null,
+    initialSlot: Int? = null,
 ) {
     var type by remember { mutableStateOf(initial?.params?.type ?: initialType ?: TypedRuleType.PIN_TO_SLOT) }
     var contact by remember { mutableStateOf(fixedContact ?: initial?.params?.contact) }
     var slotText by remember {
-        mutableStateOf((initial?.params as? TypedRuleParams.PinToSlot)?.slot?.toString() ?: "1")
+        mutableStateOf((initial?.params as? TypedRuleParams.PinToSlot)?.slot?.toString() ?: initialSlot?.takeIf { it in 1..MAX_SLOT }?.toString() ?: "1")
     }
     var picking by remember { mutableStateOf(false) }
 

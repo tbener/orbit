@@ -7,6 +7,7 @@ import com.smartdialer.data.ContactsRepository
 import com.smartdialer.data.SuggestionPipeline
 import com.smartdialer.ranking.TraceEntry
 import com.smartdialer.rules.FreeTextRule
+import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.RulesRepository
 import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
@@ -62,5 +63,26 @@ class RulesViewModel(
 
     fun deleteTyped(id: Long) {
         viewModelScope.launch { rules.deleteTypedRule(id) }
+    }
+
+    /** The user's override: this instruction becomes the given hard rule. */
+    fun makeHard(freeTextId: Long, params: TypedRuleParams) {
+        viewModelScope.launch {
+            rules.addTypedRule(params, sourceFreeTextRuleId = freeTextId, explanation = "You made this a hard rule.")
+        }
+    }
+
+    /** The user's override: remove the typed rule and keep the instruction as a soft one. */
+    fun makeSoft(freeTextId: Long, typedRuleId: Long) {
+        viewModelScope.launch {
+            rules.deleteTypedRule(typedRuleId)
+            rules.setClassification(freeTextId, FreeTextStatus.SOFT, "You made this a soft instruction.")
+        }
+    }
+
+    fun keepSoft(freeTextId: Long) {
+        viewModelScope.launch {
+            rules.setClassification(freeTextId, FreeTextStatus.SOFT, "You kept this as a soft instruction.")
+        }
     }
 }

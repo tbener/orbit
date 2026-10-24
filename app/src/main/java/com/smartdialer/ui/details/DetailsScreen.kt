@@ -40,6 +40,7 @@ import com.smartdialer.data.Contact
 import com.smartdialer.data.SignalSummary
 import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.FreeTextRule
+import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
 import com.smartdialer.rules.TypedRuleType
@@ -190,7 +191,8 @@ fun DetailsScreen(
                             icon = Icons.Outlined.ChatBubbleOutline,
                             text = rule.text,
                             detail = rule.status.label(),
-                            detailIsWarning = false,
+                            detailIsWarning = rule.status == FreeTextStatus.NEEDS_REVIEW,
+                            explanation = rule.explanation,
                             onEdit = { pending = Pending.EditInstruction(rule) },
                             onDelete = { pending = Pending.DeleteInstruction(rule) },
                         )

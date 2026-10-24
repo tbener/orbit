@@ -6,6 +6,7 @@ import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.RulesRepository
 import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
+import com.smartdialer.rules.TypedRuleType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -36,6 +37,14 @@ class RoomRulesRepository(
 
     override suspend fun updateFreeTextRule(id: Long, text: String) = freeText.updateText(id, text.trim())
 
+    override suspend fun setClassification(
+        id: Long,
+        status: FreeTextStatus,
+        explanation: String?,
+        proposedType: TypedRuleType?,
+        proposedSlot: Int?,
+    ) = freeText.setClassification(id, status, explanation, proposedType, proposedSlot)
+
     override suspend fun deleteFreeTextRule(id: Long) = db.withTransaction {
         typed.clearSource(id)
         freeText.delete(id)
@@ -45,6 +54,7 @@ class RoomRulesRepository(
         params: TypedRuleParams,
         sourceFreeTextRuleId: Long?,
         createdAt: Long?,
+        explanation: String?,
     ): Long = db.withTransaction {
         val id = typed.insert(
             TypedRuleEntity(
@@ -54,7 +64,9 @@ class RoomRulesRepository(
                 sourceFreeTextRuleId = sourceFreeTextRuleId,
             ),
         )
-        if (sourceFreeTextRuleId != null) freeText.markConverted(sourceFreeTextRuleId, id)
+        if (sourceFreeTextRuleId != null) {
+            freeText.markConverted(sourceFreeTextRuleId, id, explanation ?: "Converted to a typed rule.")
+        }
         id
     }
 
@@ -62,7 +74,7 @@ class RoomRulesRepository(
         typed.updateParams(id, params.type, params.toJson())
 
     override suspend fun deleteTypedRule(id: Long) = db.withTransaction {
-        freeText.detachFromTyped(id)
+        freeText.detachFromTyped(id, "The typed rule was removed, so this is a soft instruction again.")
         typed.delete(id)
     }
 }

@@ -23,6 +23,9 @@ data class FreeTextRuleEntity(
     val typedRuleId: Long?,
     /** Lookup key of the contact this rule is about; null for a general instruction. */
     val contactKey: String? = null,
+    val explanation: String? = null,
+    val proposedType: TypedRuleType? = null,
+    val proposedSlot: Int? = null,
 )
 
 /** [paramsJson] holds the type-specific parameters, so new rule types need no schema change. */
@@ -35,7 +38,8 @@ data class TypedRuleEntity(
     val sourceFreeTextRuleId: Long?,
 )
 
-fun FreeTextRuleEntity.toDomain() = FreeTextRule(id, text, createdAt, status, typedRuleId, contactKey)
+fun FreeTextRuleEntity.toDomain() =
+    FreeTextRule(id, text, createdAt, status, typedRuleId, contactKey, explanation, proposedType, proposedSlot)
 
 /** Returns null for a row whose parameters cannot be read, instead of crashing the whole list. */
 fun TypedRuleEntity.toDomainOrNull(): TypedRule? =
@@ -44,3 +48,33 @@ fun TypedRuleEntity.toDomainOrNull(): TypedRule? =
         ?.let { TypedRule(id, createdAt, it, sourceFreeTextRuleId) }
 
 fun TypedRuleParams.toJson(): String = TypedRuleCodec.encode(this)
+
+/**
+ * The latest ranking, one row per contact. The inputs hash, prompt version and model are repeated on every
+ * row so the whole ranking and what it was made from are always read together, in one query.
+ */
+@Entity(tableName = "ranking_cache")
+data class RankingCacheEntity(
+    @PrimaryKey val contactKey: String,
+    val rank: Int,
+    val score: Int,
+    val tier: String,
+    val reason: String,
+    val source: String,
+    val generatedAt: Long,
+    val inputsHash: String,
+    val promptVersion: String,
+    val model: String,
+)
+
+/** The last request and answer of each kind of LLM call, for the "What the LLM sees" screen. */
+@Entity(tableName = "llm_exchanges")
+data class LlmExchangeEntity(
+    @PrimaryKey val purpose: String,
+    val at: Long,
+    val outcome: String,
+    val request: String?,
+    val response: String?,
+    /** Validation issues and errors, one per line. */
+    val errors: String,
+)

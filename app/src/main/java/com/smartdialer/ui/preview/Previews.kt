@@ -87,6 +87,7 @@ private fun PreviewHome(state: HomeUiState, access: AccessState = AccessState(co
             onSelect = {},
             onLoadMore = {},
             onOpenRules = {},
+            onOpenAiSettings = {},
             onOpenDialer = {},
             access = access,
             onRequestAccess = {},
@@ -151,7 +152,7 @@ private fun DetailsEmpty() {
     OrbitTheme { DetailsScreen(detailsState(empty = true), emptyFlow(), nowMillis = 3L * 86_400_000L, actions = noDetailsActions) }
 }
 
-private val noRulesActions = RulesActions({}, { _, _ -> }, {}, {}, { _, _ -> }, {}, {})
+private val noRulesActions = RulesActions({}, { _, _ -> }, {}, {}, { _, _ -> }, {}, { _, _ -> }, { _, _ -> }, {}, {})
 
 @ThemePreviews
 @Composable
@@ -160,11 +161,17 @@ private fun RulesWithRules() {
         RulesScreen(
             state = RulesUiState(
                 freeText = listOf(
-                    FreeTextRule(1, "Ignore missed calls.", 1, FreeTextStatus.UNCLASSIFIED, null),
-                    FreeTextRule(2, "Call after 6pm.", 2, FreeTextStatus.UNCLASSIFIED, null, "key-0"),
+                    FreeTextRule(1, "Ignore missed calls.", 1, FreeTextStatus.SOFT, null, null, "Soft: a preference the ranking weighs, not a guaranteed rule."),
+                    FreeTextRule(2, "Call after 6pm.", 2, FreeTextStatus.SOFT, null, "key-0", "Soft: a time-of-day preference."),
+                    FreeTextRule(5, "Always put Mom first.", 5, FreeTextStatus.CONVERTED_TO_TYPED, 3, null, "Hard: always shows Mom in slot 1."),
+                    FreeTextRule(
+                        6, "Never show Ron.", 6, FreeTextStatus.NEEDS_REVIEW, null, null,
+                        "Looks like a hard rule (never show), but \"Ron\" matches several contacts (Ron Cohen, Ron Levi). Choose the contact to turn it into a hard rule.",
+                        com.smartdialer.rules.TypedRuleType.NEVER_SHOW,
+                    ),
                 ),
                 typed = listOf(
-                    TypedRule(3, 3, TypedRuleParams.PinToSlot(mom, 1), null),
+                    TypedRule(3, 3, TypedRuleParams.PinToSlot(mom, 1), 5),
                     TypedRule(4, 4, TypedRuleParams.NeverShow(ContactRef("gone", "Old Boss")), null),
                 ),
                 contacts = List(3) { Contact("key-$it", names[it]) },

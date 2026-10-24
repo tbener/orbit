@@ -33,7 +33,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.smartdialer.BuildConfig
 import com.smartdialer.OrbitApplication
+import com.smartdialer.ui.settings.AiDisclosureDialog
+import com.smartdialer.ui.settings.LlmInspectorScreen
+import com.smartdialer.ui.settings.SettingsActions
+import com.smartdialer.ui.settings.SettingsScreen
+import com.smartdialer.ui.settings.SettingsViewModel
 import com.smartdialer.ui.details.DetailsActions
 import com.smartdialer.ui.details.DetailsScreen
 import com.smartdialer.ui.details.DetailsViewModel
@@ -46,7 +52,7 @@ import com.smartdialer.ui.rules.RulesScreen
 import com.smartdialer.ui.rules.RulesViewModel
 import com.smartdialer.ui.theme.Orbit
 
-private enum class Screen { Home, Rules, Details }
+private enum class Screen { Home, Rules, Details, Settings, Inspector }
 
 private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_CALL_LOG)
 
@@ -63,6 +69,21 @@ fun OrbitApp() {
                     pipeline = container.suggestionPipeline,
                     rules = container.rulesRepository,
                     contacts = container.contactsRepository,
+                    aiSettings = container.aiSettings,
+                )
+            }
+        },
+    )
+    val settingsViewModel: SettingsViewModel = viewModel(
+        factory = viewModelFactory {
+            initializer {
+                SettingsViewModel(
+                    settings = container.aiSettings,
+                    suggestions = container.aiSuggestions,
+                    cache = container.rankingCache,
+                    service = container.rankingService,
+                    exchanges = container.llmExchanges,
+                    apiKeyMissing = BuildConfig.LLM_API_KEY.isBlank(),
                 )
             }
         },
@@ -77,7 +98,7 @@ fun OrbitApp() {
 
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
     var detailsKey by rememberSaveable { mutableStateOf<String?>(null) }
-    BackHandler(enabled = screen != Screen.Home) { screen = Screen.Home }
+    BackHandler(enabled = screen != Screen.Home) { screen = if (screen == Screen.Inspector) Screen.Settings else Screen.Home }
 
     val contactActions = rememberContactActions()
 
@@ -119,6 +140,7 @@ fun OrbitApp() {
                 onSelect = homeViewModel::select,
                 onLoadMore = homeViewModel::loadMore,
                 onOpenRules = { screen = Screen.Rules },
+                onOpenAiSettings = { screen = Screen.Settings },
                 onOpenDialer = contactActions::openDialer,
                 access = access,
                 onRequestAccess = {
@@ -136,6 +158,28 @@ fun OrbitApp() {
                     onAddGeneralInstruction = homeViewModel::addGeneralInstruction,
                 ),
             )
+            // Nothing is sent to the API until this has been accepted. Shown once access is granted.
+            if (state.needsDisclosure && access.all) {
+                AiDisclosureDialog(onAccept = homeViewModel::acceptDisclosure, onDecline = homeViewModel::declineDisclosure)
+            }
+        }
+        Screen.Settings -> {
+            val state by settingsViewModel.state.collectAsStateWithLifecycle()
+            SettingsScreen(
+                state = state,
+                nowMillis = System.currentTimeMillis(),
+                actions = SettingsActions(
+                    onSetEnabled = settingsViewModel::setEnabled,
+                    onAcceptDisclosure = settingsViewModel::acceptDisclosure,
+                    onRefreshNow = settingsViewModel::refreshNow,
+                    onOpenInspector = { screen = Screen.Inspector },
+                    onBack = { screen = Screen.Home },
+                ),
+            )
+        }
+        Screen.Inspector -> {
+            val state by settingsViewModel.inspector.collectAsStateWithLifecycle()
+            LlmInspectorScreen(state = state, nowMillis = System.currentTimeMillis(), onBack = { screen = Screen.Settings })
         }
         Screen.Details -> {
             val key = detailsKey
@@ -178,6 +222,9 @@ fun OrbitApp() {
                     addTyped = rulesViewModel::addTyped,
                     updateTyped = rulesViewModel::updateTyped,
                     deleteTyped = rulesViewModel::deleteTyped,
+                    makeHard = rulesViewModel::makeHard,
+                    makeSoft = rulesViewModel::makeSoft,
+                    keepSoft = rulesViewModel::keepSoft,
                     onBack = { screen = Screen.Home },
                 ),
             )

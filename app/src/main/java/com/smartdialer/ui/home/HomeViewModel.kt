@@ -9,6 +9,7 @@ import com.smartdialer.data.NumberChooser
 import com.smartdialer.data.Suggestion
 import com.smartdialer.data.SuggestionPipeline
 import com.smartdialer.data.SuggestionsRepository
+import com.smartdialer.llm.AiSettings
 import com.smartdialer.rules.RulesRepository
 import com.smartdialer.ui.UserMessage
 import kotlinx.coroutines.Job
@@ -32,6 +33,10 @@ data class HomeUiState(
     val canLoadMore: Boolean = false,
     val query: String = "",
     val searchResults: List<Contact> = emptyList(),
+    /** The last AI refresh failed; the last good result is still shown. A small, non-blocking indicator. */
+    val aiProblem: Boolean = false,
+    /** The AI switch is on but the user has not yet read what is sent; nothing is sent until they accept. */
+    val needsDisclosure: Boolean = false,
 )
 
 class HomeViewModel(
@@ -39,6 +44,7 @@ class HomeViewModel(
     pipeline: SuggestionPipeline,
     private val rules: RulesRepository,
     private val contacts: ContactsRepository,
+    private val aiSettings: AiSettings,
 ) : ViewModel() {
 
     private data class Local(
@@ -61,7 +67,8 @@ class HomeViewModel(
         suggestions.isRefreshing,
         visibleCount,
         local,
-    ) { enforced, refreshing, count, local ->
+        aiSettings.state,
+    ) { enforced, refreshing, count, local, ai ->
         val all = enforced.suggestions
         val visible = all.take(count)
         HomeUiState(
@@ -72,8 +79,20 @@ class HomeViewModel(
             canLoadMore = count < all.size,
             query = local.query,
             searchResults = local.searchResults,
+            aiProblem = ai.enabled && ai.disclosureAcknowledged && ai.lastFailureAt != null,
+            needsDisclosure = ai.enabled && !ai.disclosureAcknowledged,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+
+    /** The user accepted what is sent to the API; AI suggestions start (the auto-refresh notices). */
+    fun acceptDisclosure() {
+        aiSettings.acknowledgeDisclosure()
+    }
+
+    /** "Not now": AI suggestions are switched off, so nothing is ever sent. It can be turned on in Settings. */
+    fun declineDisclosure() {
+        aiSettings.setEnabled(false)
+    }
 
     /** Called when the contacts and call log permissions are granted or revoked. */
     fun onAccessChanged(granted: Boolean) {

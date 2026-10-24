@@ -30,8 +30,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import com.smartdialer.ranking.TraceEntry
+import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.FreeTextRule
+import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.TypedRule
 import com.smartdialer.rules.TypedRuleParams
 import com.smartdialer.ui.components.EmptyState
@@ -47,6 +50,12 @@ class RulesActions(
     val addTyped: (TypedRuleParams) -> Unit,
     val updateTyped: (Long, TypedRuleParams) -> Unit,
     val deleteTyped: (Long) -> Unit,
+    /** Turns a free-text rule into this typed rule (the user's override of "soft" or "needs review"). */
+    val makeHard: (freeTextId: Long, TypedRuleParams) -> Unit,
+    /** Deletes the typed rule a free-text rule was converted into and keeps the rule as a soft instruction. */
+    val makeSoft: (freeTextId: Long, typedRuleId: Long) -> Unit,
+    /** Keeps a rule that needed review as a soft instruction. */
+    val keepSoft: (freeTextId: Long) -> Unit,
     val onBack: () -> Unit,
 )
 
@@ -61,6 +70,7 @@ private sealed interface Pending {
     data class EditFreeText(val rule: FreeTextRule) : Pending
     data class DeleteFreeText(val rule: FreeTextRule) : Pending
     data object AddTyped : Pending
+    data class MakeHard(val rule: FreeTextRule) : Pending
     data class EditTyped(val rule: TypedRule) : Pending
     data class DeleteTyped(val rule: TypedRule, val summary: String) : Pending
 }
@@ -141,14 +151,43 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                             notFound -> "About a contact that was not found"
                             else -> "About a contact"
                         }
+                        val linked = rule.typedRuleId?.let { id -> state.typed.firstOrNull { it.id == id } }
                         RuleRow(
                             kind = RuleKind.Soft,
                             icon = Icons.Outlined.ChatBubbleOutline,
                             text = rule.text,
                             detail = "$scope · ${rule.status.label()}",
-                            detailIsWarning = false,
+                            detailIsWarning = rule.status == FreeTextStatus.NEEDS_REVIEW,
+                            explanation = rule.explanation,
                             onEdit = { pending = Pending.EditFreeText(rule) },
                             onDelete = { pending = Pending.DeleteFreeText(rule) },
+                            footer = {
+                                Column {
+                                    if (linked != null) {
+                                        val linkedName = namesByKey?.get(linked.params.contact.lookupKey) ?: linked.params.contact.displayName
+                                        Text(
+                                            text = "Enforced as: ${linked.params.describe(linkedName)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Orbit.colors.solidAccent,
+                                            fontWeight = FontWeight.SemiBold,
+                                        )
+                                    }
+                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
+                                        when (rule.status) {
+                                            FreeTextStatus.CONVERTED_TO_TYPED ->
+                                                rule.typedRuleId?.let { typedId ->
+                                                    RuleActionButton("Make soft", RuleKind.Soft) { actions.makeSoft(rule.id, typedId) }
+                                                }
+                                            FreeTextStatus.NEEDS_REVIEW -> {
+                                                RuleActionButton("Choose contact", RuleKind.Solid) { pending = Pending.MakeHard(rule) }
+                                                RuleActionButton("Keep soft", RuleKind.Soft) { actions.keepSoft(rule.id) }
+                                            }
+                                            FreeTextStatus.SOFT, FreeTextStatus.UNCLASSIFIED ->
+                                                RuleActionButton("Make hard", RuleKind.Solid) { pending = Pending.MakeHard(rule) }
+                                        }
+                                    }
+                                }
+                            },
                         )
                     }
 
@@ -185,11 +224,16 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                         val currentName = namesByKey?.get(ref.lookupKey)
                         val notFound = namesByKey != null && currentName == null
                         val text = rule.params.describe(currentName ?: ref.displayName)
+                        val source = rule.sourceFreeTextRuleId?.let { id -> state.freeText.firstOrNull { it.id == id } }
                         RuleRow(
                             kind = RuleKind.Solid,
                             icon = if (rule.params is TypedRuleParams.PinToSlot) Icons.Filled.PushPin else Icons.Filled.VisibilityOff,
                             text = text,
-                            detail = if (notFound) "Contact not found. Skipped until they are back." else null,
+                            detail = when {
+                                notFound -> "Contact not found. Skipped until they are back."
+                                source != null -> "Made from your instruction: \u201C${source.text}\u201D"
+                                else -> null
+                            },
                             detailIsWarning = notFound,
                             onEdit = { pending = Pending.EditTyped(rule) },
                             onDelete = { pending = Pending.DeleteTyped(rule, text) },
@@ -228,6 +272,19 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
             onDismiss = { pending = null },
             onSave = { actions.addTyped(it); pending = null },
         )
+        is Pending.MakeHard -> {
+            val rule = action.rule
+            val fixedName = rule.contactKey?.let { namesByKey?.get(it) }
+            TypedRuleDialog(
+                initial = null,
+                contacts = state.contacts,
+                fixedContact = if (rule.contactKey != null && fixedName != null) ContactRef(rule.contactKey, fixedName) else null,
+                initialType = rule.proposedType,
+                initialSlot = rule.proposedSlot,
+                onDismiss = { pending = null },
+                onSave = { actions.makeHard(rule.id, it); pending = null },
+            )
+        }
         is Pending.EditTyped -> TypedRuleDialog(
             initial = action.rule,
             contacts = state.contacts,
