@@ -82,7 +82,7 @@ fun ContactBubble(
     labelWidth: Dp,
     showSubtitle: Boolean,
     selected: Boolean,
-    /** Show the red missed-call text. Only the lifted copy in the quick actions does; bubbles in the field stay clean. */
+    /** Bubbles in the field show only the name. The lifted copy in the quick actions adds the red missed-call text. */
     showMissed: Boolean = false,
     onGesture: ((BubbleGesture, Rect) -> Unit)?,
     modifier: Modifier = Modifier,
@@ -175,7 +175,7 @@ fun ContactBubble(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.width(labelWidth),
             )
-            if (showSubtitle && (!missed || showMissed)) {
+            if (showSubtitle && showMissed && missed) {
                 suggestion.subtitle?.let {
                     Text(
                         text = it,

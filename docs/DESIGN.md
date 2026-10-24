@@ -72,8 +72,8 @@ The field (`OrbitLayout`, pure and unit-tested) is a structured set of rows, lik
 - **Row 1:** the top-priority bubble is largest and centered, #2 on its left and #3 on its right, medium sized.
 - **Then rows of four** in an aligned grid, read left to right and top to bottom, each row slightly smaller
   than the one above (down to a minimum). Pinned contacts keep the size of the slot they are pinned to.
-- **Every bubble has its name under it**, with a short subtitle ("Yesterday", "3 days") below, all centered on
-  the bubble in one text size per tier.
+- **Every bubble has only its name under it**, centered, in one text size per tier. No subtitles, badges or
+  "last call" labels; the missed-call text appears only in the quick-actions popup.
 - **Rings:** only a very faint halo hugging the top bubble. No bubble is ever placed on a ring.
 
 The field scrolls and loads more rows near its end (capped list). The bubbles are held perfectly still (no ambient drift); the top glow still breathes slowly.

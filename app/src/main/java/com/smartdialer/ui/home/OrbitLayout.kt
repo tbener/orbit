@@ -13,7 +13,7 @@ data class OrbitSlot(
     val diameter: Float,
     /** The width of the name under the bubble. */
     val labelWidth: Float,
-    /** The name and the subtitle hang below the bubble. */
+    /** The name hangs below the bubble. */
     val labelHeight: Float,
     val showSubtitle: Boolean,
 ) {
@@ -51,7 +51,7 @@ object OrbitLayout {
     const val HERO_CENTER_Y = 88f
 
     private const val MEDIUM_DIAMETER = 88f
-    private const val HERO_LABEL_HEIGHT = 46f
+    private const val HERO_LABEL_HEIGHT = 34f
     private const val SIDE_MARGIN = 8f
     private const val GAP = 6f
     private const val ROW_GAP = 16f
@@ -64,8 +64,8 @@ object OrbitLayout {
     /** Room under a bubble for its name and subtitle; grows with the font so the text stays inside. */
     private fun labelHeight(tier: Int, labelScale: Float): Float = when (tier) {
         0 -> HERO_LABEL_HEIGHT * labelScale
-        1 -> 40f * labelScale
-        else -> 38f * labelScale
+        1 -> 26f * labelScale
+        else -> 24f * labelScale
     }
 
     /** The diameter of a grid bubble in the given grid row (0 is the first row below the top three). */
