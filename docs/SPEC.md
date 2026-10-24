@@ -60,3 +60,7 @@ Everything Orbit stores or decides must be visible and editable by the user. Tha
 - **Outgoing:** a direction=outgoing event is recorded when the user uses Orbit's WhatsApp quick action. WhatsApp data is therefore partial: replies sent inside WhatsApp are not seen.
 - **Retention and control:** 90 days, then pruned. Enabled by default but inactive until notification access is granted; a one-time prompt explains it. Settings: toggle, status (Active / Needs permission / Off), button to the system screen, "Delete WhatsApp data".
 - **Signals:** `lastWhatsAppIncomingAt`, `lastWhatsAppOutgoingFromOrbitAt`, incoming notification counts for 7 and 30 days. Sent to the ranking model (prompt `ranking-v2`, which tells it the data is partial) and shown on Details, only when the feature is on and there is data.
+
+## Call signals
+
+"Talked" means an answered incoming or outgoing call of at least 10 seconds. Missed calls and outgoing calls that rang out are counted separately (`missedCount`, `unansweredOutgoingCount`) and never count as a conversation. The ranking payload's `callsInHistoryWindow` is the number of real conversations. WhatsApp activity is a separate signal and is never counted as a call. The prompt text is part of the inputs hash, so editing `ranking_v2.txt` refreshes the cached ranking.

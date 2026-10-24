@@ -78,7 +78,10 @@ object RankingPrompt {
                                         )
                                         put("unreturnedMissedCalls", s.unreturnedMissedCalls)
                                         put("lastMissedDaysAgo", s.lastMissedMillis?.let { daysAgo(it, inputs) }?.let(::JsonPrimitive) ?: JsonNull)
-                                        put("callsInHistoryWindow", s.callCount)
+                                        // Real conversations only: answered calls, not missed ones or outgoing calls that rang out.
+                                        put("callsInHistoryWindow", s.talkCount)
+                                        put("missedCallsInWindow", s.missedCount)
+                                        put("unansweredOutgoingCallsInWindow", s.unansweredOutgoingCount)
                                         if (s.hasWhatsApp) {
                                             put(
                                                 "whatsapp",
@@ -118,6 +121,8 @@ object RankingPrompt {
     fun inputsHash(inputs: RankingInputs, promptVersion: String = Prompts.RANKING_VERSION, model: String = LlmConfig.MODEL): String {
         val canonical = buildString {
             append(promptVersion).append('\n').append(model).append('\n')
+            // Editing the prompt file changes the result, so it changes the hash and the cache refreshes.
+            append(Prompts.ranking.hashCode()).append('\n')
             append("general:").append(inputs.generalInstructions.sorted().joinToString("|")).append('\n')
             append("pins:").append(inputs.pins.sortedBy { it.contactKey }.joinToString("|") { "${it.contactKey}=${it.slot}" }).append('\n')
             append("hidden:").append(inputs.hiddenCount).append('\n')
@@ -126,6 +131,7 @@ object RankingPrompt {
                 append(c.contact.id).append('~').append(c.contact.name).append('~')
                 append(s.lastContactMillis).append('~').append(s.unreturnedMissedCalls).append('~')
                 append(s.lastMissedMillis).append('~').append(s.callCount).append('~')
+                append(s.talkCount).append('~').append(s.missedCount).append('~').append(s.unansweredOutgoingCount).append('~')
                 append(s.lastWhatsAppIncomingAt).append('~').append(s.lastWhatsAppOutgoingFromOrbitAt).append('~')
                 append(c.instructions.sorted().joinToString("|")).append('\n')
             }

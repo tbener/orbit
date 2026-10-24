@@ -105,7 +105,7 @@ object CandidateSelector {
             .filter { (key, value) -> key in contacts && key !in hidden && key !in mustSet && (value.signals.callCount > 0 || value.signals.hasWhatsApp) }
             .sortedWith(
                 compareByDescending<Map.Entry<String, ContactActivity>> { it.value.signals.unreturnedMissedCalls > 0 }
-                    .thenByDescending { it.value.signals.callCount }
+                    .thenByDescending { it.value.signals.talkCount }
                     .thenByDescending { maxOf(it.value.signals.lastContactMillis ?: 0L, it.value.signals.lastMissedMillis ?: 0L) }
                     .thenBy { contacts.getValue(it.key).name.lowercase() },
             )

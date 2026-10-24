@@ -17,23 +17,42 @@ data class ContactSignals(
     val lastWhatsAppOutgoingFromOrbitAt: Long? = null,
     val whatsAppIncoming7d: Int = 0,
     val whatsAppIncoming30d: Int = 0,
+    /** Real conversations: answered incoming or outgoing calls of at least [MIN_TALK_SECONDS]. */
+    val talkCount: Int = 0,
+    /** Missed calls from this contact in the history window, returned or not. */
+    val missedCount: Int = 0,
+    /** Outgoing calls that were not answered (shorter than [MIN_TALK_SECONDS]). */
+    val unansweredOutgoingCount: Int = 0,
 ) {
     val hasWhatsApp: Boolean get() = lastWhatsAppIncomingAt != null || lastWhatsAppOutgoingFromOrbitAt != null
 
     companion object {
+        /** A call shorter than this was not a conversation (it rang out or was cut off). */
+        const val MIN_TALK_SECONDS = 10L
+
+        fun isTalk(record: CallRecord): Boolean =
+            (record.kind == CallKind.Incoming || record.kind == CallKind.Outgoing) && record.durationSeconds >= MIN_TALK_SECONDS
+
         fun from(records: List<CallRecord>): ContactSignals {
-            val handled = records.filter { it.kind == CallKind.Incoming || it.kind == CallKind.Outgoing }
-            val lastContact = handled.maxOfOrNull { it.timestampMillis }
+            val talks = records.filter(::isTalk)
+            val lastContact = talks.maxOfNullable { it.timestampMillis }
+            // A missed call counts as answered once the user spoke with them or tried calling them back.
+            val lastHandled = records.filter { isTalk(it) || it.kind == CallKind.Outgoing }.maxOfNullable { it.timestampMillis }
             val unreturned = records.filter {
-                it.kind == CallKind.Missed && (lastContact == null || it.timestampMillis > lastContact)
+                it.kind == CallKind.Missed && (lastHandled == null || it.timestampMillis > lastHandled)
             }
             return ContactSignals(
                 lastContactMillis = lastContact,
                 unreturnedMissedCalls = unreturned.size,
-                lastMissedMillis = unreturned.maxOfOrNull { it.timestampMillis },
+                lastMissedMillis = unreturned.maxOfNullable { it.timestampMillis },
                 callCount = records.size,
+                talkCount = talks.size,
+                missedCount = records.count { it.kind == CallKind.Missed },
+                unansweredOutgoingCount = records.count { it.kind == CallKind.Outgoing && !isTalk(it) },
             )
         }
+
+        private inline fun <T> List<T>.maxOfNullable(selector: (T) -> Long): Long? = maxOfOrNull(selector)
     }
 }
 

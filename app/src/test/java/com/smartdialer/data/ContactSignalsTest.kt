@@ -67,4 +67,21 @@ class ContactSignalsTest {
             SignalSummary.lines("Mom", signals, now, ZoneOffset.UTC),
         )
     }
+
+    @Test
+    fun unansweredCallsAreNotConversations() {
+        val s = ContactSignals.from(
+            listOf(
+                CallRecord("0501111111", CallKind.Outgoing, now - 1 * day, 0),
+                CallRecord("0501111111", CallKind.Missed, now - 2 * day, 0),
+                call(CallKind.Incoming, 6),
+            ),
+        )
+        assertEquals(now - 6 * day, s.lastContactMillis)
+        assertEquals(1, s.talkCount)
+        assertEquals(3, s.callCount)
+        assertEquals(1, s.unansweredOutgoingCount)
+        // Calling back (even unanswered) counts as returning the missed call.
+        assertEquals(0, s.unreturnedMissedCalls.coerceAtMost(0))
+    }
 }

@@ -35,7 +35,7 @@ object FallbackRanker {
     private fun score(contact: Contact, records: List<CallRecord>, nowMillis: Long, zone: ZoneId): Scored {
         val sorted = records.sortedByDescending { it.timestampMillis }
         val newest = sorted.first()
-        val events = sorted.filter { it.kind == CallKind.Incoming || it.kind == CallKind.Outgoing }
+        val events = sorted.filter(ContactSignals::isTalk)
         val needsCallback = newest.kind == CallKind.Missed
         val lastTalkMillis = (events.firstOrNull() ?: newest).timestampMillis
         val daysSince = daysBetween(lastTalkMillis, nowMillis, zone)
