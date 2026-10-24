@@ -2,11 +2,13 @@ package com.smartdialer.ui.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -15,15 +17,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PhoneMissed
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
@@ -45,6 +57,7 @@ enum class BubbleTier(val diameter: Dp, val initialsSp: Int, val badge: Dp) {
     Small(56.dp, 18, 20.dp),
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContactBubble(
     suggestion: Suggestion,
@@ -52,28 +65,56 @@ fun ContactBubble(
     tier: BubbleTier,
     selected: Boolean,
     onClick: () -> Unit,
+    onPin: () -> Unit,
+    onNeverSuggest: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = bubbleColorsFor(suggestion.contact.id)
     val name = suggestion.contact.name
+    var menuOpen by remember { mutableStateOf(false) }
     val description = buildString {
         append(name)
         append(", priority ").append(rank)
         suggestion.subtitle?.let { append(", ").append(it) }
         if (suggestion.badge == SuggestionBadge.MissedCall) append(", missed call")
+        if (suggestion.isPinned) append(", pinned")
     }
 
     Column(
         modifier = modifier
             .clip(RoundedCornerShape(16.dp))
-            .clickable(onClickLabel = "Show why $name is suggested", role = Role.Button, onClick = onClick)
+            .combinedClickable(
+                onClickLabel = "Show why $name is suggested",
+                role = Role.Button,
+                onLongClickLabel = "More actions for $name",
+                onLongClick = { menuOpen = true },
+                onClick = onClick,
+            )
             .padding(4.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = description
                 stateDescription = if (selected) "Selected" else ""
+                customActions = listOf(
+                    CustomAccessibilityAction("Pin to slot") { onPin(); true },
+                    CustomAccessibilityAction("Never suggest") { onNeverSuggest(); true },
+                )
             },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text("Pin to slot…") },
+                leadingIcon = { Icon(Icons.Filled.PushPin, contentDescription = null) },
+                onClick = { menuOpen = false; onPin() },
+                modifier = Modifier.heightIn(min = 48.dp),
+            )
+            DropdownMenuItem(
+                text = { Text("Never suggest") },
+                leadingIcon = { Icon(Icons.Filled.VisibilityOff, contentDescription = null) },
+                onClick = { menuOpen = false; onNeverSuggest() },
+                modifier = Modifier.heightIn(min = 48.dp),
+            )
+        }
         Box(modifier = Modifier.size(tier.diameter)) {
             ContactAvatar(
                 contact = suggestion.contact,

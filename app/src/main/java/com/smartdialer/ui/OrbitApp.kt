@@ -29,13 +29,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import com.smartdialer.data.device.DeviceCallLogSource
-import com.smartdialer.data.device.DeviceContactsSource
-import com.smartdialer.data.device.DeviceSuggestionsRepository
-import com.smartdialer.rules.fake.FakeRulesRepository
+import com.smartdialer.OrbitApplication
 import com.smartdialer.ui.home.AccessState
 import com.smartdialer.ui.home.HomeScreen
 import com.smartdialer.ui.home.HomeViewModel
+import com.smartdialer.ui.rules.RulesActions
 import com.smartdialer.ui.rules.RulesScreen
 import com.smartdialer.ui.rules.RulesViewModel
 
@@ -47,17 +45,25 @@ private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.READ_CONTACTS, Ma
 fun OrbitApp() {
     val context = LocalContext.current
 
+    val container = (context.applicationContext as OrbitApplication).container
     val homeViewModel: HomeViewModel = viewModel(
         factory = viewModelFactory {
             initializer {
-                val resolver = context.applicationContext.contentResolver
-                HomeViewModel(DeviceSuggestionsRepository(DeviceContactsSource(resolver), DeviceCallLogSource(resolver)))
+                HomeViewModel(
+                    suggestions = container.suggestionsRepository,
+                    pipeline = container.suggestionPipeline,
+                    rules = container.rulesRepository,
+                    contacts = container.contactsRepository,
+                )
             }
         },
     )
-    // Rules are still in-memory fakes until stage 3.
     val rulesViewModel: RulesViewModel = viewModel(
-        factory = viewModelFactory { initializer { RulesViewModel(FakeRulesRepository()) } },
+        factory = viewModelFactory {
+            initializer {
+                RulesViewModel(container.rulesRepository, container.contactsRepository, container.suggestionPipeline)
+            }
+        },
     )
 
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
@@ -103,19 +109,24 @@ fun OrbitApp() {
                     permissionLauncher.launch(REQUIRED_PERMISSIONS.filterNot { isGranted(context, it) }.toTypedArray())
                 },
                 onOpenSettings = openAppSettings,
+                messages = homeViewModel.messages,
+                onPin = homeViewModel::pin,
+                onNeverSuggest = homeViewModel::neverSuggest,
             )
         }
         Screen.Rules -> {
-            val freeText by rulesViewModel.freeTextRules.collectAsStateWithLifecycle()
-            val typed by rulesViewModel.typedRules.collectAsStateWithLifecycle()
+            val state by rulesViewModel.state.collectAsStateWithLifecycle()
             RulesScreen(
-                freeTextRules = freeText,
-                typedRules = typed,
-                onUpdateFreeText = rulesViewModel::updateFreeText,
-                onDeleteFreeText = rulesViewModel::deleteFreeText,
-                onUpdateTyped = rulesViewModel::updateTyped,
-                onDeleteTyped = rulesViewModel::deleteTyped,
-                onBack = { screen = Screen.Home },
+                state = state,
+                actions = RulesActions(
+                    addFreeText = rulesViewModel::addFreeText,
+                    updateFreeText = rulesViewModel::updateFreeText,
+                    deleteFreeText = rulesViewModel::deleteFreeText,
+                    addTyped = rulesViewModel::addTyped,
+                    updateTyped = rulesViewModel::updateTyped,
+                    deleteTyped = rulesViewModel::deleteTyped,
+                    onBack = { screen = Screen.Home },
+                ),
             )
         }
     }

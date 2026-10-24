@@ -14,25 +14,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,36 +44,49 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.smartdialer.ranking.TraceEntry
 import com.smartdialer.rules.FreeTextRule
+import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.TypedRule
+import com.smartdialer.rules.TypedRuleParams
 
-private sealed interface PendingAction {
-    data class EditFreeText(val rule: FreeTextRule) : PendingAction
-    data class DeleteFreeText(val rule: FreeTextRule) : PendingAction
-    data class EditTyped(val rule: TypedRule) : PendingAction
-    data class DeleteTyped(val rule: TypedRule) : PendingAction
+class RulesActions(
+    val addFreeText: (String) -> Unit,
+    val updateFreeText: (Long, String) -> Unit,
+    val deleteFreeText: (Long) -> Unit,
+    val addTyped: (TypedRuleParams) -> Unit,
+    val updateTyped: (Long, TypedRuleParams) -> Unit,
+    val deleteTyped: (Long) -> Unit,
+    val onBack: () -> Unit,
+)
+
+private sealed interface Pending {
+    data class EditFreeText(val rule: FreeTextRule) : Pending
+    data class DeleteFreeText(val rule: FreeTextRule) : Pending
+    data object AddTyped : Pending
+    data class EditTyped(val rule: TypedRule) : Pending
+    data class DeleteTyped(val rule: TypedRule, val summary: String) : Pending
 }
 
-private fun TypedRule.describe(): String = when (this) {
-    is TypedRule.Pin -> "Always show $contactName in slot $slot"
-    is TypedRule.Hide -> "Never show $contactName"
+private fun FreeTextStatus.label(): String = when (this) {
+    FreeTextStatus.UNCLASSIFIED -> "Unclassified (classification arrives in a later stage)"
+    FreeTextStatus.SOFT -> "Soft preference"
+    FreeTextStatus.CONVERTED_TO_TYPED -> "Converted to a typed rule"
+}
+
+private fun TypedRuleParams.describe(name: String): String = when (this) {
+    is TypedRuleParams.PinToSlot -> "Always show $name in slot $slot"
+    is TypedRuleParams.NeverShow -> "Never show $name"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RulesScreen(
-    freeTextRules: List<FreeTextRule>,
-    typedRules: List<TypedRule>,
-    onUpdateFreeText: (FreeTextRule) -> Unit,
-    onDeleteFreeText: (String) -> Unit,
-    onUpdateTyped: (TypedRule) -> Unit,
-    onDeleteTyped: (String) -> Unit,
-    onBack: () -> Unit,
-) {
-    var pending by remember { mutableStateOf<PendingAction?>(null) }
+fun RulesScreen(state: RulesUiState, actions: RulesActions) {
+    var pending by remember { mutableStateOf<Pending?>(null) }
+    val namesByKey = state.contacts?.associate { it.id to it.name }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -81,7 +94,7 @@ fun RulesScreen(
             CenterAlignedTopAppBar(
                 title = { Text("Rules", fontWeight = FontWeight.SemiBold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack, modifier = Modifier.size(48.dp)) {
+                    IconButton(onClick = actions.onBack, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
@@ -102,17 +115,20 @@ fun RulesScreen(
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                 )
             }
-            if (freeTextRules.isEmpty()) {
+            item(key = "free-add") { AddFreeTextRow(onAdd = actions.addFreeText) }
+            if (state.freeText.isEmpty()) {
                 item(key = "free-empty") { EmptyHint("No free-text rules yet.") }
             }
-            items(freeTextRules, key = { "f-${it.id}" }) { rule ->
+            items(state.freeText, key = { "f-${it.id}" }) { rule ->
                 RuleRow(
                     icon = Icons.Outlined.ChatBubbleOutline,
                     text = rule.text,
+                    detail = rule.status.label(),
+                    detailIsWarning = false,
                     containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
                     accent = MaterialTheme.colorScheme.primary,
-                    onEdit = { pending = PendingAction.EditFreeText(rule) },
-                    onDelete = { pending = PendingAction.DeleteFreeText(rule) },
+                    onEdit = { pending = Pending.EditFreeText(rule) },
+                    onDelete = { pending = Pending.DeleteFreeText(rule) },
                 )
             }
 
@@ -126,43 +142,68 @@ fun RulesScreen(
                     modifier = Modifier.padding(top = 16.dp),
                 )
             }
-            if (typedRules.isEmpty()) {
+            item(key = "typed-add") {
+                OutlinedButton(
+                    onClick = { pending = Pending.AddTyped },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                ) {
+                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add typed rule")
+                }
+            }
+            if (state.typed.isEmpty()) {
                 item(key = "typed-empty") { EmptyHint("No typed rules yet.") }
             }
-            items(typedRules, key = { "t-${it.id}" }) { rule ->
+            items(state.typed, key = { "t-${it.id}" }) { rule ->
+                val ref = rule.params.contact
+                val currentName = namesByKey?.get(ref.lookupKey)
+                val notFound = namesByKey != null && currentName == null
+                val text = rule.params.describe(currentName ?: ref.displayName)
                 RuleRow(
-                    icon = if (rule is TypedRule.Pin) Icons.Filled.PushPin else Icons.Filled.VisibilityOff,
-                    text = rule.describe(),
+                    icon = if (rule.params is TypedRuleParams.PinToSlot) Icons.Filled.PushPin else Icons.Filled.VisibilityOff,
+                    text = text,
+                    detail = if (notFound) "Contact not found. This rule is skipped until the contact is back." else null,
+                    detailIsWarning = notFound,
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.35f),
                     accent = MaterialTheme.colorScheme.tertiary,
-                    onEdit = { pending = PendingAction.EditTyped(rule) },
-                    onDelete = { pending = PendingAction.DeleteTyped(rule) },
+                    onEdit = { pending = Pending.EditTyped(rule) },
+                    onDelete = { pending = Pending.DeleteTyped(rule, text) },
                 )
             }
+
+            item(key = "debug") { DebugTrace(state.trace, modifier = Modifier.padding(top = 16.dp)) }
         }
     }
 
     when (val action = pending) {
         null -> Unit
-        is PendingAction.EditFreeText -> EditFreeTextDialog(
+        is Pending.EditFreeText -> EditFreeTextDialog(
             rule = action.rule,
             onDismiss = { pending = null },
-            onSave = { onUpdateFreeText(it); pending = null },
+            onSave = { actions.updateFreeText(action.rule.id, it); pending = null },
         )
-        is PendingAction.EditTyped -> EditTypedRuleDialog(
-            rule = action.rule,
-            onDismiss = { pending = null },
-            onSave = { onUpdateTyped(it); pending = null },
-        )
-        is PendingAction.DeleteFreeText -> ConfirmDeleteDialog(
+        is Pending.DeleteFreeText -> ConfirmDeleteDialog(
             summary = action.rule.text,
             onDismiss = { pending = null },
-            onConfirm = { onDeleteFreeText(action.rule.id); pending = null },
+            onConfirm = { actions.deleteFreeText(action.rule.id); pending = null },
         )
-        is PendingAction.DeleteTyped -> ConfirmDeleteDialog(
-            summary = action.rule.describe(),
+        Pending.AddTyped -> TypedRuleDialog(
+            initial = null,
+            contacts = state.contacts,
             onDismiss = { pending = null },
-            onConfirm = { onDeleteTyped(action.rule.id); pending = null },
+            onSave = { actions.addTyped(it); pending = null },
+        )
+        is Pending.EditTyped -> TypedRuleDialog(
+            initial = action.rule,
+            contacts = state.contacts,
+            onDismiss = { pending = null },
+            onSave = { actions.updateTyped(action.rule.id, it); pending = null },
+        )
+        is Pending.DeleteTyped -> ConfirmDeleteDialog(
+            summary = action.summary,
+            onDismiss = { pending = null },
+            onConfirm = { actions.deleteTyped(action.rule.id); pending = null },
         )
     }
 }
@@ -204,6 +245,33 @@ private fun SectionHeader(
 }
 
 @Composable
+private fun AddFreeTextRow(onAdd: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = text,
+                onValueChange = { text = it },
+                label = { Text("Add a rule in your own words") },
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Button(
+                onClick = { onAdd(text); text = "" },
+                enabled = text.isNotBlank(),
+                modifier = Modifier.heightIn(min = 48.dp),
+            ) { Text("Add rule") }
+        }
+        Text(
+            text = "New rules are saved as unclassified. The LLM will sort them into soft preferences and typed rules in a later stage.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+    }
+}
+
+@Composable
 private fun EmptyHint(text: String) {
     Text(
         text = text,
@@ -217,6 +285,8 @@ private fun EmptyHint(text: String) {
 private fun RuleRow(
     icon: ImageVector,
     text: String,
+    detail: String?,
+    detailIsWarning: Boolean,
     containerColor: Color,
     accent: Color,
     onEdit: () -> Unit,
@@ -229,11 +299,17 @@ private fun RuleRow(
         ) {
             Icon(icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.weight(1f).padding(vertical = 12.dp),
-            )
+            Column(Modifier.weight(1f).padding(vertical = 12.dp)) {
+                Text(text = text, style = MaterialTheme.typography.bodyMedium)
+                if (detail != null) {
+                    Text(
+                        text = detail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (detailIsWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = if (detailIsWarning) FontWeight.SemiBold else FontWeight.Normal,
+                    )
+                }
+            }
             IconButton(onClick = onEdit, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Filled.Edit, contentDescription = "Edit rule: $text")
             }
@@ -245,109 +321,33 @@ private fun RuleRow(
 }
 
 @Composable
-private fun EditFreeTextDialog(
-    rule: FreeTextRule,
-    onDismiss: () -> Unit,
-    onSave: (FreeTextRule) -> Unit,
-) {
-    var text by remember { mutableStateOf(rule.text) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Edit free-text rule") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
-                label = { Text("Rule") },
-                minLines = 3,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onSave(rule.copy(text = text.trim())) },
-                enabled = text.isNotBlank(),
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text("Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
-        },
-    )
-}
-
-@Composable
-private fun EditTypedRuleDialog(
-    rule: TypedRule,
-    onDismiss: () -> Unit,
-    onSave: (TypedRule) -> Unit,
-) {
-    var name by remember { mutableStateOf(rule.contactName) }
-    var slotText by remember { mutableStateOf((rule as? TypedRule.Pin)?.slot?.toString().orEmpty()) }
-    val slot = slotText.toIntOrNull()
-    val valid = name.isNotBlank() && (rule !is TypedRule.Pin || (slot != null && slot >= 1))
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (rule is TypedRule.Pin) "Edit pin rule" else "Edit hide rule") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Contact") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (rule is TypedRule.Pin) {
-                    OutlinedTextField(
-                        value = slotText,
-                        onValueChange = { value -> slotText = value.filter { it.isDigit() }.take(2) },
-                        label = { Text("Slot (1 = top)") },
-                        singleLine = true,
-                        isError = slot == null || slot < 1,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
+private fun DebugTrace(trace: List<TraceEntry>, modifier: Modifier = Modifier) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        Text(
+            text = "Developer: last enforcement trace",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(
+            text = "What the deterministic layer did with the typed rules the last time the home list was built.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp),
+        )
+        Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (trace.isEmpty()) {
+                    Text("No typed rules have been applied yet.", style = MaterialTheme.typography.bodySmall)
+                }
+                trace.forEach { entry ->
+                    Text(
+                        text = "#${entry.ruleId}  ${entry.outcome}: ${entry.message}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = FontFamily.Monospace,
                     )
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val updated = when (rule) {
-                        is TypedRule.Pin -> rule.copy(contactName = name.trim(), slot = slot ?: rule.slot)
-                        is TypedRule.Hide -> rule.copy(contactName = name.trim())
-                    }
-                    onSave(updated)
-                },
-                enabled = valid,
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text("Save") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
-        },
-    )
-}
-
-@Composable
-private fun ConfirmDeleteDialog(
-    summary: String,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Delete this rule?") },
-        text = { Text(summary) },
-        confirmButton = {
-            TextButton(onClick = onConfirm, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text("Delete", color = MaterialTheme.colorScheme.error)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = 48.dp)) { Text("Cancel") }
-        },
-    )
+        }
+    }
 }

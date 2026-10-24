@@ -12,13 +12,15 @@ Native Android, Kotlin, Jetpack Compose, Material 3. Gradle Kotlin DSL with vers
 
 ## Package layout (`app/src/main/java/com/smartdialer/`)
 - `ui/` screens and components
-- `data/` Room, call log access, contacts access, and the deterministic `FallbackRanker` (device sources in `data/device/`; `data/fake/` holds sample data)
-- `ranking/` post-LLM deterministic enforcement of hard rules
+- `data/` contacts and call log access (`data/device/`), the `FallbackRanker`, Room storage for rules (`data/db/`), and `SuggestionPipeline` (ranker, then enforcer, then UI)
+- `ranking/` `RuleEnforcer`: pure, deterministic enforcement of typed rules, with a trace; conflict rules are documented in its KDoc
 - `llm/` API client, prompt building, response parsing
 - `rules/` free-text rules and typed rules, as separate models
 
 ## Conventions
 - Hard-rule enforcement stays deterministic and separate from the LLM layer: `ranking/` must not call or depend on `llm/`, and its output is final over the LLM's.
-- Keep free-text rules and typed rules as separate models and lists.
+- Keep free-text rules and typed rules as separate models and lists. Rules reference contacts by lookup key (`Contact.id`), never by name or number.
+- NEVER_SHOW applies to automatic suggestions only, never to search results.
+- Tests: `./gradlew testDebugUnitTest` (JVM); Room tests are instrumented, run with `ANDROID_SERIAL=<emulator> ./gradlew connectedDebugAndroidTest` (they uninstall the app from every connected device otherwise).
 - Never commit secrets. The API key lives in `local.properties` (`LLM_API_KEY` -> `BuildConfig`). Keystores and env files are gitignored.
 - Build: `./gradlew assembleDebug`.

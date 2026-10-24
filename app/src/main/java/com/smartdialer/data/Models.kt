@@ -1,5 +1,6 @@
 package com.smartdialer.data
 
+/** [id] is the contacts lookup key: stable across contact merges, unlike the numeric contact id. */
 data class Contact(
     val id: String,
     val name: String,
@@ -14,6 +15,8 @@ data class Suggestion(
     val subtitle: String?,
     val badge: SuggestionBadge?,
     val reason: String,
+    /** True when a pin rule put this contact in its slot. */
+    val isPinned: Boolean = false,
 )
 
 /** A contact as stored on the device, with every phone number it has. */

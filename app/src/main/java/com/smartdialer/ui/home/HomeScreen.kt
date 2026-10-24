@@ -30,6 +30,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -38,7 +42,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusManager
@@ -53,9 +59,11 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Contact
+import com.smartdialer.data.MAX_SUGGESTIONS
 import com.smartdialer.data.Suggestion
 import com.smartdialer.ui.ContactAvatar
 import com.smartdialer.ui.theme.bubbleColorsFor
+import kotlinx.coroutines.flow.Flow
 
 private const val SMALL_ROW_SIZE = 4
 
@@ -70,10 +78,40 @@ fun HomeScreen(
     access: AccessState,
     onRequestAccess: () -> Unit,
     onOpenSettings: () -> Unit,
+    messages: Flow<UserMessage>,
+    onPin: (Contact, Int) -> Unit,
+    onNeverSuggest: (Contact) -> Unit,
 ) {
     val searching = state.query.isNotBlank()
     val needsAccess = if (searching) !access.contacts else !access.all
-    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(messages) {
+        messages.collect { message ->
+            val result = snackbarHostState.showSnackbar(
+                message = message.text,
+                actionLabel = if (message.undo != null) "Undo" else null,
+                duration = SnackbarDuration.Long,
+            )
+            if (result == SnackbarResult.ActionPerformed) message.undo?.invoke()
+        }
+    }
+
+    var pinTarget by remember { mutableStateOf<Pair<Suggestion, Int>?>(null) }
+    pinTarget?.let { (suggestion, slot) ->
+        PinSlotDialog(
+            contactName = suggestion.contact.name,
+            initialSlot = slot,
+            maxSlot = MAX_SUGGESTIONS,
+            onDismiss = { pinTarget = null },
+            onConfirm = { onPin(suggestion.contact, it); pinTarget = null },
+        )
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             HomeHeader(onOpenRules)
             SearchField(state.query, onQueryChange)
@@ -83,7 +121,15 @@ fun HomeScreen(
                 } else if (searching) {
                     SearchResults(state.query, state.searchResults)
                 } else {
-                    BubbleList(state, onSelect, onLoadMore)
+                    BubbleList(
+                        state = state,
+                        actions = BubbleActions(
+                            onSelect = onSelect,
+                            onPin = { suggestion, slot -> pinTarget = suggestion to slot },
+                            onNeverSuggest = { onNeverSuggest(it.contact) },
+                        ),
+                        onLoadMore = onLoadMore,
+                    )
                 }
             }
             BottomPanel(state, showSuggestionInfo = !searching && !needsAccess, onOpenDialer = onOpenDialer)
@@ -143,7 +189,7 @@ private fun SearchField(query: String, onQueryChange: (String) -> Unit) {
 @Composable
 private fun BubbleList(
     state: HomeUiState,
-    onSelect: (String) -> Unit,
+    actions: BubbleActions,
     onLoadMore: () -> Unit,
 ) {
     val listState = rememberLazyListState()
@@ -178,15 +224,9 @@ private fun BubbleList(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.Bottom,
                 ) {
-                    flanks.getOrNull(0)?.let { FlankBubble(it, state, onSelect) }
-                    ContactBubble(
-                        suggestion = hero.value,
-                        rank = hero.index + 1,
-                        tier = BubbleTier.Hero,
-                        selected = state.selectedId == hero.value.contact.id,
-                        onClick = { onSelect(hero.value.contact.id) },
-                    )
-                    flanks.getOrNull(1)?.let { FlankBubble(it, state, onSelect) }
+                    flanks.getOrNull(0)?.let { Bubble(it, BubbleTier.Flank, state, actions) }
+                    Bubble(hero, BubbleTier.Hero, state, actions)
+                    flanks.getOrNull(1)?.let { Bubble(it, BubbleTier.Flank, state, actions) }
                 }
             }
         }
@@ -194,16 +234,7 @@ private fun BubbleList(
             val firstRow = row.first().index < 3 + SMALL_ROW_SIZE
             val tier = if (firstRow) BubbleTier.Medium else BubbleTier.Small
             Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                row.forEach { (index, suggestion) ->
-                    ContactBubble(
-                        suggestion = suggestion,
-                        rank = index + 1,
-                        tier = tier,
-                        selected = state.selectedId == suggestion.contact.id,
-                        onClick = { onSelect(suggestion.contact.id) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+                row.forEach { entry -> Bubble(entry, tier, state, actions, Modifier.weight(1f)) }
                 // Keep an incomplete last row aligned to the grid.
                 repeat(SMALL_ROW_SIZE - row.size) { Spacer(Modifier.weight(1f)) }
             }
@@ -227,18 +258,32 @@ private fun BubbleList(
     }
 }
 
+/** What the user can do with a bubble: tap it, or long-press for the rule shortcuts. */
+private class BubbleActions(
+    val onSelect: (String) -> Unit,
+    val onPin: (Suggestion, Int) -> Unit,
+    val onNeverSuggest: (Suggestion) -> Unit,
+)
+
 @Composable
-private fun FlankBubble(
+private fun Bubble(
     entry: IndexedValue<Suggestion>,
+    tier: BubbleTier,
     state: HomeUiState,
-    onSelect: (String) -> Unit,
+    actions: BubbleActions,
+    modifier: Modifier = Modifier,
 ) {
+    val suggestion = entry.value
+    val rank = entry.index + 1
     ContactBubble(
-        suggestion = entry.value,
-        rank = entry.index + 1,
-        tier = BubbleTier.Flank,
-        selected = state.selectedId == entry.value.contact.id,
-        onClick = { onSelect(entry.value.contact.id) },
+        suggestion = suggestion,
+        rank = rank,
+        tier = tier,
+        selected = state.selectedId == suggestion.contact.id,
+        onClick = { actions.onSelect(suggestion.contact.id) },
+        onPin = { actions.onPin(suggestion, rank) },
+        onNeverSuggest = { actions.onNeverSuggest(suggestion) },
+        modifier = modifier,
     )
 }
 
