@@ -52,8 +52,8 @@ typealias OrbitGestureHandler = (IndexedValue<Suggestion>, OrbitSlot, BubbleGest
 
 /**
  * The home screen's field of people, in rows: the top bubble in the middle with a soft glow and #2 and #3
- * beside it, then a grid of four per row, drifting very slowly. It scrolls vertically; more rows appear as
- * it nears the end. With system animations off, nothing drifts or breathes.
+ * beside it, then a grid of four per row, held still. It scrolls vertically; more rows appear as
+ * it nears the end. With system animations off, the glow does not breathe.
  */
 @Composable
 fun OrbitField(
@@ -75,12 +75,6 @@ fun OrbitField(
     val seen = remember { mutableSetOf<String>() }
 
     val ambient = if (motion.reduced) null else rememberInfiniteTransition(label = "ambient")
-    val drift: State<Float>? = ambient?.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(motion.driftMillis, easing = LinearEasing), RepeatMode.Restart),
-        label = "drift",
-    )
     val breathe: State<Float>? = ambient?.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
@@ -155,19 +149,10 @@ fun OrbitField(
                         val left by animateDpAsState((slot.center.x - labelWidth / 2f).dp, motion.move(380), label = "slotX")
                         val top by animateDpAsState((slot.center.y - slot.diameter / 2f).dp, motion.move(380), label = "slotY")
                         val firstTime = remember { seen.add(suggestion.contact.id) }
-                        val phase = (slot.index * 0.137f) % 1f
-                        val amplitude = if (slot.ring == 0) 1.6f else 2.2f
                         Box(
                             Modifier
                                 .offset(left, top)
                                 .width(labelWidth.dp)
-                                .graphicsLayer {
-                                    val t = drift?.value
-                                    if (t != null) {
-                                        translationX = sin(2f * PI.toFloat() * (t + phase)) * amplitude.dp.toPx()
-                                        translationY = cos(2f * PI.toFloat() * (2f * t + phase * 1.7f)) * amplitude * 0.8f * density
-                                    }
-                                }
                                 .bubbleEntrance(play = firstTime, index = slot.index)
                                 .alpha(if (suggestion.contact.id == hiddenId) 0f else 1f),
                         ) {

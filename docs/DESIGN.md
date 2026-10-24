@@ -76,8 +76,7 @@ The field (`OrbitLayout`, pure and unit-tested) is a structured set of rows, lik
   the bubble in one text size per tier.
 - **Rings:** only a very faint halo hugging the top bubble. No bubble is ever placed on a ring.
 
-The field scrolls and loads more rows near its end (capped list). The bubbles drift very slowly and the glow
-breathes.
+The field scrolls and loads more rows near its end (capped list). The bubbles are held perfectly still (no ambient drift); the top glow still breathes slowly.
 
 Controls are minimal: a slim translucent search pill, glass icon buttons (rules, add general
 instruction), a small pulsing dot next to the title while refreshing, and a floating "Open dialer" pill
@@ -109,13 +108,12 @@ field with a send button replace the stock ones; empty states are short and a li
 ## Motion
 
 Tokens in `Motion`: 120 / 220 / 340 ms; entering things decelerate, leaving things accelerate and are
-quicker; springs for the arc and the lift. Bubbles fade and scale in once, staggered. The drift (18s per
-cycle) and the glow breathing (5s) are ambient and slow. **Reduced motion:** when system animations are
-off, every spec snaps and the drift, breathing and pulse are not run.
+quicker; springs for the arc and the lift. Bubbles fade and scale in once, staggered. The top glow breathing (5s) is the only ambient motion; bubbles do not drift. **Reduced motion:** when system animations are
+off, every spec snaps and the breathing and pulse are not run.
 
 ## Planned UX tweaks
 
-- Clean interface preferred. **Done:** the missed-call badge icon is removed from bubbles; a missed call is shown by subtitle text only ("Missed today", "Missed 2d"), plus the spoken description.
+- Clean interface preferred. **Done:** the missed-call badge icon is removed from bubbles; a missed call is no longer marked on the bubbles at all; the red "Missed today" / "Missed 2d" text shows only in the quick-actions popup, and the spoken description still says it.
 
 ## Notes
 

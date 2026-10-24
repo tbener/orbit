@@ -244,6 +244,7 @@ fun QuickActionsOverlay(
                 diameter = slot.diameter.dp,
                 labelWidth = labelWidth.dp,
                 showSubtitle = slot.showSubtitle,
+                showMissed = true,
                 selected = false,
                 onGesture = null,
                 lift = lift.value,
