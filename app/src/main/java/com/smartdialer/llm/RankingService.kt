@@ -2,6 +2,8 @@ package com.smartdialer.llm
 
 import com.smartdialer.data.ContactsRepository
 import com.smartdialer.data.SuggestionsRepository
+import com.smartdialer.data.WhatsAppEventStore
+import com.smartdialer.data.WhatsAppSignals
 import com.smartdialer.rules.RulesRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -35,6 +37,8 @@ class RankingService(
     private val classifier: RuleClassifier?,
     private val clock: () -> Long = System::currentTimeMillis,
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
+    private val whatsApp: WhatsAppEventStore? = null,
+    private val whatsAppEnabled: () -> Boolean = { false },
 ) {
     private val mutex = Mutex()
     private val _isRefreshing = MutableStateFlow(false)
@@ -55,7 +59,11 @@ class RankingService(
             val now = clock()
             val inputs = CandidateSelector.select(
                 contacts = deviceContacts.associate { it.contact.id to it.contact },
-                activity = local.activity.value,
+                activity = if (whatsApp != null && whatsAppEnabled()) {
+                    WhatsAppSignals.merge(local.activity.value, whatsApp.all(), now)
+                } else {
+                    local.activity.value
+                },
                 freeText = rules.freeTextRules.first(),
                 typed = rules.typedRules.first(),
                 nowMillis = now,

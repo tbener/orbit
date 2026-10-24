@@ -31,6 +31,7 @@ Everything Orbit stores or decides must be visible and editable by the user: fre
 
 ## LLM data contract and privacy
 - Sent to the Anthropic API: contact display name and opaque lookup key, call-history signals (days since last call, unreturned missed calls, call counts), the user's instructions, pins as context, date/time/time zone. **Never** sent: phone numbers, emails, photos, notes, or anything else from a contact.
+- WhatsApp signals (when on): days since a contact messaged, notification counts, and last chat opened from Orbit; never text.
 - Nothing is sent until the user accepts the one-time disclosure; the AI switch off means no network calls at all. Prompts live in `app/src/main/resources/prompts/` with a version constant in `llm/Prompts.kt`; the version is stored with each result.
 - Enforcement stays deterministic: the cached ranking always passes through `RuleEnforcer` with the current typed rules. The LLM never overrides a hard rule.
 
@@ -41,7 +42,7 @@ Rows, not rings: top bubble largest and centered with #2 and #3 either side, the
 - Hard-rule enforcement stays deterministic and separate from the LLM layer: `ranking/` must not call or depend on `llm/`, and its output is final over the LLM's.
 - Keep free-text rules and typed rules as separate models and lists. Rules reference contacts by lookup key (`Contact.id`), never by name or number.
 - NEVER_SHOW applies to automatic suggestions only, never to search results.
-- A free-text rule with a `contactKey` is about that contact; without one it is a general instruction. Orbit never reads anything from WhatsApp; it only opens `wa.me` links.
+- A free-text rule with a `contactKey` is about that contact; without one it is a general instruction. Orbit opens `wa.me` links; the only thing it reads from WhatsApp is the sender and time of message notifications (opt-in notification access), never message text. See docs/SPEC.md.
 - Room schemas are exported to `app/schemas/` and committed. Changing an entity means bumping the version, adding a `Migration` and a migration test.
 - Tests: `./gradlew testDebugUnitTest` (JVM); Room tests are instrumented, run with `ANDROID_SERIAL=<emulator> ./gradlew connectedDebugAndroidTest` (they uninstall the app from every connected device otherwise).
 - Never commit secrets. The API key lives in `local.properties` (`LLM_API_KEY` -> `BuildConfig`). Keystores and env files are gitignored.

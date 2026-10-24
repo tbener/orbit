@@ -102,7 +102,7 @@ object CandidateSelector {
         val mustSet = must.toSet()
 
         val rest = activity.entries
-            .filter { (key, value) -> key in contacts && key !in hidden && key !in mustSet && value.signals.callCount > 0 }
+            .filter { (key, value) -> key in contacts && key !in hidden && key !in mustSet && (value.signals.callCount > 0 || value.signals.hasWhatsApp) }
             .sortedWith(
                 compareByDescending<Map.Entry<String, ContactActivity>> { it.value.signals.unreturnedMissedCalls > 0 }
                     .thenByDescending { it.value.signals.callCount }

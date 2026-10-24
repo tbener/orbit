@@ -76,7 +76,7 @@ class MigrationTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.databaseBuilder(context, OrbitDatabase::class.java, dbName)
-            .addMigrations(OrbitDatabase.MIGRATION_1_2, OrbitDatabase.MIGRATION_2_3)
+            .addMigrations(OrbitDatabase.MIGRATION_1_2, OrbitDatabase.MIGRATION_2_3, OrbitDatabase.MIGRATION_3_4)
             .build()
         try {
             val repo = RoomRulesRepository(db)
@@ -111,5 +111,16 @@ class MigrationTest {
         }
         db.execSQL("INSERT INTO ranking_cache VALUES ('k', 1, 90, 'TOP', 'why', 'LLM', 5, 'h', 'ranking-v1', 'm')")
         db.execSQL("INSERT INTO llm_exchanges VALUES ('ranking', 5, 'ok', 'req', 'resp', '')")
+    }
+
+    @Test
+    fun migrate3To4_createsTheWhatsAppEventsTable() {
+        helper.createDatabase(dbName, 3).close()
+        val db = helper.runMigrationsAndValidate(dbName, 4, true, OrbitDatabase.MIGRATION_3_4)
+        db.execSQL("INSERT INTO whatsapp_events (contactKey, at, outgoing) VALUES ('k', 5, 0)")
+        db.query("SELECT COUNT(*) FROM whatsapp_events").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(1, c.getInt(0))
+        }
     }
 }

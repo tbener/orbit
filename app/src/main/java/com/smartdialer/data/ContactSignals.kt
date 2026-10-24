@@ -12,7 +12,14 @@ data class ContactSignals(
     val lastMissedMillis: Long?,
     /** Number of call-log entries for this contact in the history window. */
     val callCount: Int,
+    /** WhatsApp (see [WhatsAppEvent]): incoming message notifications, and chats started from Orbit. Partial data. */
+    val lastWhatsAppIncomingAt: Long? = null,
+    val lastWhatsAppOutgoingFromOrbitAt: Long? = null,
+    val whatsAppIncoming7d: Int = 0,
+    val whatsAppIncoming30d: Int = 0,
 ) {
+    val hasWhatsApp: Boolean get() = lastWhatsAppIncomingAt != null || lastWhatsAppOutgoingFromOrbitAt != null
+
     companion object {
         fun from(records: List<CallRecord>): ContactSignals {
             val handled = records.filter { it.kind == CallKind.Incoming || it.kind == CallKind.Outgoing }
@@ -45,10 +52,15 @@ object SignalSummary {
         nowMillis: Long,
         zone: ZoneId = ZoneId.systemDefault(),
     ): List<String> {
-        if (signals == null || signals.callCount == 0) {
+        if (signals == null || (signals.callCount == 0 && !signals.hasWhatsApp)) {
             return listOf("No calls with $name in the recent call history.")
         }
         val lines = mutableListOf<String>()
+        if (signals.callCount == 0) {
+            lines += "No calls with $name in the recent call history."
+            lines += whatsAppLines(signals, nowMillis, zone)
+            return lines
+        }
         lines += signals.lastContactMillis
             ?.let { "Last spoke ${FallbackRanker.agoPhrase(FallbackRanker.daysBetween(it, nowMillis, zone))}." }
             ?: "You have not spoken to $name in the recent call history."
@@ -59,6 +71,18 @@ object SignalSummary {
         } else {
             lines += "No missed calls waiting for a callback."
         }
+        lines += whatsAppLines(signals, nowMillis, zone)
         return lines
+    }
+
+    /** Plain-language WhatsApp lines. Only present when there is data (and the feature is on). */
+    private fun whatsAppLines(signals: ContactSignals, nowMillis: Long, zone: ZoneId): List<String> = buildList {
+        signals.lastWhatsAppIncomingAt?.let {
+            add("Messaged you on WhatsApp ${FallbackRanker.agoPhrase(FallbackRanker.daysBetween(it, nowMillis, zone))}.")
+            if (signals.whatsAppIncoming7d > 1) add("${signals.whatsAppIncoming7d} WhatsApp message notifications in the last 7 days.")
+        }
+        signals.lastWhatsAppOutgoingFromOrbitAt?.let {
+            add("You opened WhatsApp for them from Orbit ${FallbackRanker.agoPhrase(FallbackRanker.daysBetween(it, nowMillis, zone))}.")
+        }
     }
 }

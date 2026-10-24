@@ -78,3 +78,12 @@ data class LlmExchangeEntity(
     /** Validation issues and errors, one per line. */
     val errors: String,
 )
+
+/** One WhatsApp event: who, when, direction. Never any message content. */
+@Entity(tableName = "whatsapp_events", indices = [Index("at")])
+data class WhatsAppEventEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val contactKey: String,
+    val at: Long,
+    val outgoing: Boolean,
+)

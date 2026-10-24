@@ -35,7 +35,9 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.smartdialer.BuildConfig
 import com.smartdialer.OrbitApplication
+import com.smartdialer.data.hasNotificationAccess
 import com.smartdialer.ui.settings.AiDisclosureDialog
+import com.smartdialer.ui.settings.WhatsAppPrompt
 import com.smartdialer.ui.settings.LlmInspectorScreen
 import com.smartdialer.ui.settings.SettingsActions
 import com.smartdialer.ui.settings.SettingsScreen
@@ -70,6 +72,8 @@ fun OrbitApp() {
                     rules = container.rulesRepository,
                     contacts = container.contactsRepository,
                     aiSettings = container.aiSettings,
+                    whatsAppStore = container.whatsAppStore,
+                    whatsAppSettings = container.whatsAppSettings,
                 )
             }
         },
@@ -84,6 +88,8 @@ fun OrbitApp() {
                     service = container.rankingService,
                     exchanges = container.llmExchanges,
                     apiKeyMissing = BuildConfig.LLM_API_KEY.isBlank(),
+                    whatsAppSettings = container.whatsAppSettings,
+                    whatsAppStore = container.whatsAppStore,
                 )
             }
         },
@@ -102,6 +108,9 @@ fun OrbitApp() {
 
     val contactActions = rememberContactActions()
 
+    var whatsAppGranted by remember { mutableStateOf(hasNotificationAccess(context)) }
+    val whatsAppState by container.whatsAppSettings.state.collectAsStateWithLifecycle()
+
     var askedForAccess by rememberSaveable { mutableStateOf(false) }
     var access by remember { mutableStateOf(readAccess(context, askedForAccess)) }
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -111,8 +120,15 @@ fun OrbitApp() {
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         access = readAccess(context, askedForAccess)
         homeViewModel.onResumed()
+        val granted = hasNotificationAccess(context)
+        whatsAppGranted = granted
+        settingsViewModel.onAccessChecked(granted)
     }
     LaunchedEffect(access.all) { homeViewModel.onAccessChanged(access.all) }
+
+    val openNotificationAccess = {
+        runCatching { context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+    }
 
     val openAppSettings = {
         context.startActivity(
@@ -156,8 +172,18 @@ fun OrbitApp() {
                     onOpenDetails = { detailsKey = it.id; screen = Screen.Details },
                     onAddContactInstruction = homeViewModel::addContactInstruction,
                     onAddGeneralInstruction = homeViewModel::addGeneralInstruction,
+                    onWhatsAppUsed = homeViewModel::onWhatsAppUsed,
                 ),
             )
+            // Already granted (for example by hand): nothing to ask.
+            LaunchedEffect(whatsAppGranted) { if (whatsAppGranted) container.whatsAppSettings.markPromptHandled() }
+            // One-time prompt, after the AI disclosure so two dialogs never stack.
+            if (!state.needsDisclosure && access.all && whatsAppState.enabled && !whatsAppState.promptHandled && !whatsAppGranted) {
+                WhatsAppPrompt(
+                    onEnable = { container.whatsAppSettings.markPromptHandled(); openNotificationAccess() },
+                    onNotNow = { container.whatsAppSettings.markPromptHandled() },
+                )
+            }
             // Nothing is sent to the API until this has been accepted. Shown once access is granted.
             if (state.needsDisclosure && access.all) {
                 AiDisclosureDialog(onAccept = homeViewModel::acceptDisclosure, onDecline = homeViewModel::declineDisclosure)
@@ -173,6 +199,9 @@ fun OrbitApp() {
                     onAcceptDisclosure = settingsViewModel::acceptDisclosure,
                     onRefreshNow = settingsViewModel::refreshNow,
                     onOpenInspector = { screen = Screen.Inspector },
+                    onSetWhatsApp = settingsViewModel::setWhatsAppEnabled,
+                    onOpenNotificationAccess = { openNotificationAccess() },
+                    onDeleteWhatsApp = settingsViewModel::deleteWhatsAppData,
                     onBack = { screen = Screen.Home },
                 ),
             )
@@ -190,7 +219,13 @@ fun OrbitApp() {
                     key = "details-$key",
                     factory = viewModelFactory {
                         initializer {
-                            DetailsViewModel(key, container.rulesRepository, container.contactsRepository, container.suggestionsRepository)
+                            DetailsViewModel(
+                                key,
+                                container.rulesRepository,
+                                container.contactsRepository,
+                                container.suggestionsRepository,
+                                container.whatsAppEvents,
+                            )
                         }
                     },
                 )

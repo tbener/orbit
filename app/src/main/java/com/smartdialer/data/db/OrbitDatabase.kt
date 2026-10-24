@@ -13,8 +13,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TypedRuleEntity::class,
         RankingCacheEntity::class,
         LlmExchangeEntity::class,
+        WhatsAppEventEntity::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
 )
 abstract class OrbitDatabase : RoomDatabase() {
@@ -22,11 +23,12 @@ abstract class OrbitDatabase : RoomDatabase() {
     abstract fun typedRuleDao(): TypedRuleDao
     abstract fun rankingCacheDao(): RankingCacheDao
     abstract fun llmExchangeDao(): LlmExchangeDao
+    abstract fun whatsAppEventDao(): WhatsAppEventDao
 
     companion object {
         fun create(context: Context): OrbitDatabase =
             Room.databaseBuilder(context, OrbitDatabase::class.java, "orbit.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
 
         /** Adds the optional contact a free-text rule is about. Existing rules stay general (null). */
@@ -57,6 +59,17 @@ abstract class OrbitDatabase : RoomDatabase() {
                     "CREATE TABLE IF NOT EXISTS llm_exchanges (purpose TEXT NOT NULL, at INTEGER NOT NULL, " +
                         "outcome TEXT NOT NULL, request TEXT, response TEXT, errors TEXT NOT NULL, PRIMARY KEY(purpose))",
                 )
+            }
+        }
+
+        /** WhatsApp signals: sender, time and direction only. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS whatsapp_events (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "contactKey TEXT NOT NULL, at INTEGER NOT NULL, outgoing INTEGER NOT NULL)",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_whatsapp_events_at ON whatsapp_events (at)")
             }
         }
     }

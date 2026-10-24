@@ -79,6 +79,17 @@ object RankingPrompt {
                                         put("unreturnedMissedCalls", s.unreturnedMissedCalls)
                                         put("lastMissedDaysAgo", s.lastMissedMillis?.let { daysAgo(it, inputs) }?.let(::JsonPrimitive) ?: JsonNull)
                                         put("callsInHistoryWindow", s.callCount)
+                                        if (s.hasWhatsApp) {
+                                            put(
+                                                "whatsapp",
+                                                buildJsonObject {
+                                                    put("lastIncomingDaysAgo", s.lastWhatsAppIncomingAt?.let { daysAgo(it, inputs) }?.let(::JsonPrimitive) ?: JsonNull)
+                                                    put("incomingNotifications7d", s.whatsAppIncoming7d)
+                                                    put("incomingNotifications30d", s.whatsAppIncoming30d)
+                                                    put("lastOutgoingFromOrbitDaysAgo", s.lastWhatsAppOutgoingFromOrbitAt?.let { daysAgo(it, inputs) }?.let(::JsonPrimitive) ?: JsonNull)
+                                                },
+                                            )
+                                        }
                                     },
                                 )
                                 put("instructions", JsonArray(candidate.instructions.map(::JsonPrimitive)))
@@ -115,6 +126,7 @@ object RankingPrompt {
                 append(c.contact.id).append('~').append(c.contact.name).append('~')
                 append(s.lastContactMillis).append('~').append(s.unreturnedMissedCalls).append('~')
                 append(s.lastMissedMillis).append('~').append(s.callCount).append('~')
+                append(s.lastWhatsAppIncomingAt).append('~').append(s.lastWhatsAppOutgoingFromOrbitAt).append('~')
                 append(c.instructions.sorted().joinToString("|")).append('\n')
             }
         }

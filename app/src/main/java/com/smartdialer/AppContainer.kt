@@ -5,6 +5,13 @@ import com.smartdialer.data.AiSuggestionsRepository
 import com.smartdialer.data.ContactsRepository
 import com.smartdialer.data.SuggestionPipeline
 import com.smartdialer.data.SuggestionsRepository
+import com.smartdialer.data.WhatsAppEvent
+import com.smartdialer.data.WhatsAppEventStore
+import com.smartdialer.data.WhatsAppSettings
+import com.smartdialer.data.db.RoomWhatsAppEventStore
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import com.smartdialer.data.db.OrbitDatabase
 import com.smartdialer.data.db.RoomLlmExchangeStore
 import com.smartdialer.data.db.RoomRankingCacheStore
@@ -39,6 +46,13 @@ class AppContainer(context: Context) {
     private val deviceSuggestions: SuggestionsRepository =
         DeviceSuggestionsRepository(contactsRepository, DeviceCallLogSource(resolver))
 
+    val whatsAppStore: WhatsAppEventStore = RoomWhatsAppEventStore(database)
+    val whatsAppSettings = WhatsAppSettings(context)
+
+    /** WhatsApp events, or an empty list while the feature is switched off. */
+    val whatsAppEvents: Flow<List<WhatsAppEvent>> =
+        combine(whatsAppSettings.state, whatsAppStore.events) { settings, events -> if (settings.enabled) events else emptyList() }
+
     val aiSettings: AiSettings = SharedPrefsAiSettings(context)
     val rankingCache: RankingCacheStore = RoomRankingCacheStore(database)
     val llmExchanges: LlmExchangeStore = RoomLlmExchangeStore(database)
@@ -54,6 +68,8 @@ class AppContainer(context: Context) {
         contacts = contactsRepository,
         local = deviceSuggestions,
         classifier = classifier,
+        whatsApp = whatsAppStore,
+        whatsAppEnabled = { whatsAppSettings.state.value.enabled },
     )
 
     /** The ranking source for the home screen: cached LLM ranking when on, the fallback ranker otherwise. */
@@ -63,5 +79,6 @@ class AppContainer(context: Context) {
 
     init {
         AiAutoRefresh(scope, rulesRepository, aiSettings, rankingService)
+        scope.launch { whatsAppStore.pruneOld(System.currentTimeMillis()) }
     }
 }

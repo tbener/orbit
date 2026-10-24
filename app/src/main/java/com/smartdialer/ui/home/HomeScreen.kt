@@ -98,6 +98,7 @@ class HomeActions(
     val onOpenDetails: (Contact) -> Unit,
     val onAddContactInstruction: (Contact, String) -> Unit,
     val onAddGeneralInstruction: (String) -> Unit,
+    val onWhatsAppUsed: (Contact) -> Unit,
 )
 
 @Composable
@@ -129,17 +130,20 @@ fun HomeScreen(
     var bottomPanelHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
 
-    fun runWith(purpose: NumberPurpose, number: String) {
+    fun runWith(contact: Contact, purpose: NumberPurpose, number: String) {
         when (purpose) {
             NumberPurpose.Call -> actions.onCallNumber(number)
-            NumberPurpose.WhatsApp -> actions.onWhatsAppNumber(number)
+            NumberPurpose.WhatsApp -> {
+                actions.onWhatsAppUsed(contact)
+                actions.onWhatsAppNumber(number)
+            }
         }
     }
 
     fun useNumber(contact: Contact, purpose: NumberPurpose) {
         when (val choice = actions.chooseNumber(contact)) {
             NumberChoice.None -> Unit
-            is NumberChoice.Use -> runWith(purpose, choice.number)
+            is NumberChoice.Use -> runWith(contact, purpose, choice.number)
             is NumberChoice.Pick -> numberPick = NumberPick(contact, purpose, choice.candidates)
         }
     }
@@ -246,7 +250,7 @@ fun HomeScreen(
     numberPick?.let { pick ->
         NumberPickerDialog(
             pick = pick,
-            onPick = { number -> runWith(pick.purpose, number); numberPick = null },
+            onPick = { number -> runWith(pick.contact, pick.purpose, number); numberPick = null },
             onDismiss = { numberPick = null },
         )
     }

@@ -6,10 +6,10 @@ package com.smartdialer.llm
  * every ranking result, so a result made by an older prompt is refreshed.
  */
 object Prompts {
-    const val RANKING_VERSION = "ranking-v1"
+    const val RANKING_VERSION = "ranking-v2"
     const val CLASSIFICATION_VERSION = "classification-v1"
 
-    val ranking: String by lazy { load("prompts/ranking_v1.txt") }
+    val ranking: String by lazy { load("prompts/ranking_v2.txt") }
     val classification: String by lazy { load("prompts/classification_v1.txt") }
 
     private fun load(path: String): String {

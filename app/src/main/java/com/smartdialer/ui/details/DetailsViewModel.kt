@@ -6,6 +6,8 @@ import com.smartdialer.data.Contact
 import com.smartdialer.data.ContactSignals
 import com.smartdialer.data.ContactsRepository
 import com.smartdialer.data.SuggestionsRepository
+import com.smartdialer.data.WhatsAppEvent
+import com.smartdialer.data.WhatsAppSignals
 import com.smartdialer.rules.FreeTextRule
 import com.smartdialer.rules.RulesRepository
 import com.smartdialer.rules.TypedRule
@@ -41,6 +43,7 @@ class DetailsViewModel(
     private val rules: RulesRepository,
     contacts: ContactsRepository,
     suggestions: SuggestionsRepository,
+    whatsAppEvents: Flow<List<WhatsAppEvent>>,
 ) : ViewModel() {
 
     private val _messages = Channel<UserMessage>(Channel.BUFFERED)
@@ -50,7 +53,9 @@ class DetailsViewModel(
         rules.freeTextRules,
         rules.typedRules,
         contacts.contacts,
-        suggestions.activity,
+        combine(suggestions.activity, whatsAppEvents) { activity, events ->
+            WhatsAppSignals.merge(activity, events, System.currentTimeMillis())
+        },
     ) { freeText, typed, deviceContacts, activity ->
         val mine = typed.filter { it.params.contact.lookupKey == contactKey }
         DetailsUiState(

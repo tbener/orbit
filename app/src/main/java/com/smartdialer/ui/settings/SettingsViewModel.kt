@@ -3,7 +3,10 @@ package com.smartdialer.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.AiSuggestionsRepository
+import com.smartdialer.data.WhatsAppEventStore
+import com.smartdialer.data.WhatsAppSettings
 import com.smartdialer.llm.AiSettings
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.smartdialer.llm.LlmExchange
 import com.smartdialer.llm.LlmExchangeStore
 import com.smartdialer.llm.RankingCacheStore
@@ -28,6 +31,10 @@ data class SettingsUiState(
     val promptVersion: String? = null,
     val model: String? = null,
     val apiKeyMissing: Boolean = false,
+    val whatsAppEnabled: Boolean = true,
+    /** Notification access is granted in the system settings. */
+    val whatsAppGranted: Boolean = false,
+    val whatsAppEventCount: Int = 0,
 )
 
 data class InspectorUiState(
@@ -42,10 +49,29 @@ class SettingsViewModel(
     service: RankingService,
     exchanges: LlmExchangeStore,
     apiKeyMissing: Boolean,
+    private val whatsAppSettings: WhatsAppSettings,
+    private val whatsAppStore: WhatsAppEventStore,
 ) : ViewModel() {
 
-    val state: StateFlow<SettingsUiState> = combine(settings.state, cache.ranking, service.isRefreshing) { s, ranking, refreshing ->
+    private val whatsAppGranted = MutableStateFlow(false)
+
+    /** Called when the app returns to the foreground, since notification access is changed in system settings. */
+    fun onAccessChecked(granted: Boolean) {
+        whatsAppGranted.value = granted
+    }
+
+    private val whatsAppState = combine(whatsAppSettings.state, whatsAppGranted, whatsAppStore.events) { s, granted, events ->
+        Triple(s.enabled, granted, events.size)
+    }
+
+    val state: StateFlow<SettingsUiState> = combine(
+        combine(settings.state, cache.ranking, service.isRefreshing) { s, ranking, refreshing -> Triple(s, ranking, refreshing) },
+        whatsAppState,
+    ) { (s, ranking, refreshing), (waEnabled, waGranted, waCount) ->
         SettingsUiState(
+            whatsAppEnabled = waEnabled,
+            whatsAppGranted = waGranted,
+            whatsAppEventCount = waCount,
             enabled = s.enabled,
             acknowledged = s.disclosureAcknowledged,
             refreshing = refreshing,
@@ -71,6 +97,12 @@ class SettingsViewModel(
     fun acceptDisclosure() {
         settings.acknowledgeDisclosure()
         settings.setEnabled(true)
+    }
+
+    fun setWhatsAppEnabled(enabled: Boolean) = whatsAppSettings.setEnabled(enabled)
+
+    fun deleteWhatsAppData() {
+        viewModelScope.launch { whatsAppStore.deleteAll() }
     }
 
     fun refreshNow() {

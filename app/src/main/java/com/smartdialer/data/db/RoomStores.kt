@@ -79,3 +79,22 @@ class RoomLlmExchangeStore(db: OrbitDatabase) : LlmExchangeStore {
         ),
     )
 }
+
+class RoomWhatsAppEventStore(private val db: OrbitDatabase) : com.smartdialer.data.WhatsAppEventStore {
+    private val dao = db.whatsAppEventDao()
+
+    override val events: Flow<List<com.smartdialer.data.WhatsAppEvent>> =
+        dao.observeAll().map { rows -> rows.map { com.smartdialer.data.WhatsAppEvent(it.contactKey, it.at, it.outgoing) } }
+
+    override suspend fun all() = dao.all().map { com.smartdialer.data.WhatsAppEvent(it.contactKey, it.at, it.outgoing) }
+
+    override suspend fun record(event: com.smartdialer.data.WhatsAppEvent) {
+        dao.insert(WhatsAppEventEntity(contactKey = event.contactKey, at = event.at, outgoing = event.outgoing))
+        pruneOld(event.at)
+    }
+
+    override suspend fun pruneOld(nowMillis: Long) =
+        dao.deleteBefore(nowMillis - com.smartdialer.data.WhatsAppEventStore.RETENTION_MILLIS)
+
+    override suspend fun deleteAll() = dao.deleteAll()
+}

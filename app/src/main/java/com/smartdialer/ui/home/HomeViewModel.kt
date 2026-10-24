@@ -9,6 +9,9 @@ import com.smartdialer.data.NumberChooser
 import com.smartdialer.data.Suggestion
 import com.smartdialer.data.SuggestionPipeline
 import com.smartdialer.data.SuggestionsRepository
+import com.smartdialer.data.WhatsAppEvent
+import com.smartdialer.data.WhatsAppEventStore
+import com.smartdialer.data.WhatsAppSettings
 import com.smartdialer.llm.AiSettings
 import com.smartdialer.rules.RulesRepository
 import com.smartdialer.rules.TypedRuleParams
@@ -48,6 +51,8 @@ class HomeViewModel(
     private val rules: RulesRepository,
     private val contacts: ContactsRepository,
     private val aiSettings: AiSettings,
+    private val whatsAppStore: WhatsAppEventStore,
+    private val whatsAppSettings: WhatsAppSettings,
 ) : ViewModel() {
 
     private data class Local(
@@ -98,6 +103,14 @@ class HomeViewModel(
     /** "Not now": AI suggestions are switched off, so nothing is ever sent. It can be turned on in Settings. */
     fun declineDisclosure() {
         aiSettings.setEnabled(false)
+    }
+
+    /** The WhatsApp button was used for [contact]: remember it as an outgoing event (when the feature is on). */
+    fun onWhatsAppUsed(contact: Contact) {
+        if (!whatsAppSettings.state.value.enabled) return
+        viewModelScope.launch {
+            whatsAppStore.record(WhatsAppEvent(contact.id, System.currentTimeMillis(), outgoing = true))
+        }
     }
 
     /** Called when the contacts and call log permissions are granted or revoked. */

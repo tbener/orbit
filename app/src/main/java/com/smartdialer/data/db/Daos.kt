@@ -96,3 +96,21 @@ interface LlmExchangeDao {
     @androidx.room.Upsert
     suspend fun upsert(exchange: LlmExchangeEntity)
 }
+
+@Dao
+interface WhatsAppEventDao {
+    @Query("SELECT * FROM whatsapp_events ORDER BY at DESC")
+    fun observeAll(): Flow<List<WhatsAppEventEntity>>
+
+    @Query("SELECT * FROM whatsapp_events ORDER BY at DESC")
+    suspend fun all(): List<WhatsAppEventEntity>
+
+    @Insert
+    suspend fun insert(event: WhatsAppEventEntity)
+
+    @Query("DELETE FROM whatsapp_events WHERE at < :before")
+    suspend fun deleteBefore(before: Long)
+
+    @Query("DELETE FROM whatsapp_events")
+    suspend fun deleteAll()
+}

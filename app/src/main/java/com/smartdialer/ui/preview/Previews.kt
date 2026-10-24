@@ -76,6 +76,7 @@ private val noHomeActions = HomeActions(
     onOpenDetails = {},
     onAddContactInstruction = { _, _ -> },
     onAddGeneralInstruction = {},
+    onWhatsAppUsed = {},
 )
 
 @Composable
