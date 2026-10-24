@@ -9,6 +9,10 @@ import androidx.compose.ui.graphics.Color
 @Immutable
 class BubbleTone(val top: Color, val bottom: Color, val content: Color)
 
+/** A solid-looking gradient for a round action button; the glyph on it is white (contrast at least 3:1). */
+@Immutable
+class ActionStyle(val top: Color, val bottom: Color)
+
 /** Everything the Material 3 scheme has no role for. Read it with `Orbit.colors`. */
 @Immutable
 class OrbitColors(
@@ -45,7 +49,19 @@ class OrbitColors(
     val scrim: Color,
     /** The orbit rings. */
     val ring: Color,
+    /** One color per quick action. Green is reserved for WhatsApp. The AI sparkle has its own violet-to-cyan pair. */
+    val actionCall: ActionStyle,
+    val actionWhatsApp: ActionStyle,
+    val actionContact: ActionStyle,
+    val actionDetails: ActionStyle,
+    val actionAi: ActionStyle,
 )
+
+private val ActionCall = ActionStyle(Color(0xFF1E88E5), Color(0xFF1565C0))
+private val ActionWhatsApp = ActionStyle(Color(0xFF1DA851), Color(0xFF148A41)) // WhatsApp green, darkened to reach 3:1 with a white glyph
+private val ActionContact = ActionStyle(Color(0xFF8E5CF0), Color(0xFF6D3FD6))
+private val ActionDetails = ActionStyle(Color(0xFFE06A22), Color(0xFFC4501A))
+private val ActionAi = ActionStyle(Color(0xFF7C5CFF), Color(0xFF0E8FC2))
 
 // Dark is the primary design: deep ink with a hint of navy, bright glossy orbs, one aqua-to-azure accent.
 // Light is its own design: soft off-white with pastel light, pastel orbs with deep initials.
@@ -163,6 +179,11 @@ internal val DarkExtras = OrbitColors(
     alertText = Color(0xFFFF7A59),
     scrim = Color(0xBD050813),
     ring = Color(0x2E5EEAD4),
+    actionCall = ActionCall,
+    actionWhatsApp = ActionWhatsApp,
+    actionContact = ActionContact,
+    actionDetails = ActionDetails,
+    actionAi = ActionAi,
 )
 
 internal val LightExtras = OrbitColors(
@@ -197,4 +218,9 @@ internal val LightExtras = OrbitColors(
     alertText = Color(0xFFC9361F),
     scrim = Color(0x9E1A1F3A),
     ring = Color(0x243B6EF5),
+    actionCall = ActionCall,
+    actionWhatsApp = ActionWhatsApp,
+    actionContact = ActionContact,
+    actionDetails = ActionDetails,
+    actionAi = ActionAi,
 )

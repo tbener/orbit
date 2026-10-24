@@ -42,7 +42,7 @@ class Sizing {
     val hairline = 1.dp
 
     /** The floating round buttons of the quick-actions arc. */
-    val arcButton = 52.dp
+    val arcButton = 58.dp
 }
 
 /** Shape scale. Glass cards use 24, soft rows 26, solid rows 8, tags 10. */

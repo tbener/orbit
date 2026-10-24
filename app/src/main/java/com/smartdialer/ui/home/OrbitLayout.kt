@@ -44,18 +44,18 @@ data class OrbitLayoutResult(
  * the only rings are a faint halo hugging the top bubble.
  */
 object OrbitLayout {
-    const val HERO_DIAMETER = 128f
+    const val HERO_DIAMETER = 136f
     const val COLUMNS = 4
 
     /** Where the top bubble's center is, from the top of the field. */
-    const val HERO_CENTER_Y = 88f
+    const val HERO_CENTER_Y = 94f
 
-    private const val MEDIUM_DIAMETER = 88f
+    private const val MEDIUM_DIAMETER = 92f
     private const val HERO_LABEL_HEIGHT = 34f
     private const val SIDE_MARGIN = 8f
     private const val GAP = 6f
     private const val ROW_GAP = 16f
-    private const val FIRST_GRID_DIAMETER = 68f
+    private const val FIRST_GRID_DIAMETER = 72f
     private const val GRID_STEP = 4f
     private const val MIN_GRID_DIAMETER = 52f
     private const val BOTTOM_ROOM = 150f

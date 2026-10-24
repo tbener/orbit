@@ -3,7 +3,9 @@ package com.smartdialer.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.Contact
+import com.smartdialer.data.ContactActivity
 import com.smartdialer.data.ContactsRepository
+import com.smartdialer.data.DeviceContact
 import com.smartdialer.data.NumberChoice
 import com.smartdialer.data.NumberChooser
 import com.smartdialer.data.Suggestion
@@ -43,7 +45,35 @@ data class HomeUiState(
     val needsDisclosure: Boolean = false,
     /** Contacts under a never-show rule. Search still finds them; they are labelled. */
     val hiddenIds: Set<String> = emptySet(),
+    /** AI suggestions are on (switch on and disclosure accepted). Off or pending means the sparkle shows as paused. */
+    val aiOn: Boolean = true,
+    /** What the open, empty search shows: frequent and recent contacts. */
+    val searchSuggestions: SearchSuggestions = SearchSuggestions(),
 )
+
+/** Up to eight contacts for the empty search, in two groups without duplicates. */
+data class SearchSuggestions(val frequent: List<Contact> = emptyList(), val recent: List<Contact> = emptyList()) {
+    val isEmpty: Boolean get() = frequent.isEmpty() && recent.isEmpty()
+}
+
+/** Builds [SearchSuggestions] from the call log facts. Pure. */
+object SearchSuggestionsBuilder {
+    fun build(activity: Map<String, ContactActivity>, contacts: List<DeviceContact>?): SearchSuggestions {
+        if (contacts == null) return SearchSuggestions()
+        val byKey = contacts.associate { it.contact.id to it.contact }
+        val known = activity.filterKeys { it in byKey }
+        val frequent = known.entries
+            .filter { it.value.signals.callsLast90d > 0 }
+            .sortedWith(compareByDescending<Map.Entry<String, ContactActivity>> { it.value.signals.callsLast90d }
+                .thenByDescending { it.value.signals.lastCallAt ?: 0L })
+            .take(4).map { it.key }
+        val recent = known.entries
+            .filter { it.key !in frequent && it.value.signals.lastCallAt != null }
+            .sortedByDescending { it.value.signals.lastCallAt }
+            .take(8 - frequent.size).map { it.key }
+        return SearchSuggestions(frequent.map(byKey::getValue), recent.map(byKey::getValue))
+    }
+}
 
 class HomeViewModel(
     private val suggestions: SuggestionsRepository,
@@ -61,6 +91,12 @@ class HomeViewModel(
         val searchResults: List<Contact> = emptyList(),
     )
 
+    private data class Extras(
+        val ai: com.smartdialer.llm.AiSettingsState,
+        val hidden: Set<String>,
+        val searchSuggestions: SearchSuggestions,
+    )
+
     private val visibleCount = MutableStateFlow(PAGE_SIZE)
     private val local = MutableStateFlow(Local())
     private var searchJob: Job? = null
@@ -75,10 +111,15 @@ class HomeViewModel(
         suggestions.isRefreshing,
         visibleCount,
         local,
-        combine(aiSettings.state, rules.typedRules) { ai, typed ->
-            ai to typed.map { it.params }.filterIsInstance<TypedRuleParams.NeverShow>().map { it.contact.lookupKey }.toSet()
+        combine(aiSettings.state, rules.typedRules, suggestions.activity, contacts.contacts) { ai, typed, activity, deviceContacts ->
+            Extras(
+                ai,
+                typed.map { it.params }.filterIsInstance<TypedRuleParams.NeverShow>().map { it.contact.lookupKey }.toSet(),
+                SearchSuggestionsBuilder.build(activity, deviceContacts),
+            )
         },
-    ) { enforced, refreshing, count, local, (ai, hidden) ->
+    ) { enforced, refreshing, count, local, extras ->
+        val (ai, hidden, searchSuggestions) = extras
         val all = enforced.suggestions
         val visible = all.take(count)
         HomeUiState(
@@ -92,6 +133,8 @@ class HomeViewModel(
             aiProblem = ai.enabled && ai.disclosureAcknowledged && ai.lastFailureAt != null,
             needsDisclosure = ai.enabled && !ai.disclosureAcknowledged,
             hiddenIds = hidden,
+            aiOn = ai.enabled && ai.disclosureAcknowledged,
+            searchSuggestions = searchSuggestions,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -187,8 +230,8 @@ class HomeViewModel(
     }
 
     private companion object {
-        // 7 = the hero cluster (3) plus one full row of 4 small bubbles.
-        const val PAGE_SIZE = 7
+        // 11 = the hero cluster (3) plus two full rows of 4 small bubbles.
+        const val PAGE_SIZE = 11
         const val SEARCH_DEBOUNCE_MS = 150L
         const val STALE_AFTER_MILLIS = 60_000L
     }

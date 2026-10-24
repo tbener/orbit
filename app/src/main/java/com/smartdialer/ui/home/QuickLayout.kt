@@ -19,6 +19,8 @@ data class QuickLayoutResult(
     val captionTopLeft: Offset,
     /** True when no arc fitted and the buttons were put in a straight row instead. */
     val fellBack: Boolean,
+    /** Where each button's label goes (beyond its button along the arc; under it in a row). */
+    val labelRects: List<Rect> = emptyList(),
 )
 
 /**
@@ -43,7 +45,7 @@ object QuickLayout {
         gap: Float,
     ): QuickLayoutResult {
         val footprintWidth = buttonSize + gap
-        val radii = listOf(0f, 14f, 28f, 44f, 70f, 100f, 140f).map { bubbleRadius + buttonSize / 2f + gap * 2f + it }
+        val radii = listOf(0f, 14f, 28f, 44f, 70f, 100f, 140f).map { bubbleRadius + buttonSize / 2f + gap * 3f + it }
 
         fun footprint(center: Offset) = buttonFootprint(center, bubbleCenter, buttonSize, footprintWidth, labelHeight)
 
@@ -71,8 +73,16 @@ object QuickLayout {
 
         val fellBack = buttons == null
         val finalButtons = buttons ?: rowFallback(bubbleCenter, bubbleRadius, buttonCount, buttonSize, labelHeight, gap, nameRect, bounds)
+        val labels = finalButtons.map { c ->
+            if (fellBack) {
+                // In a row the label sits under its button.
+                Rect(c.x - footprintWidth / 2f, c.y + buttonSize / 2f, c.x + footprintWidth / 2f, c.y + buttonSize / 2f + labelHeight)
+            } else {
+                labelRect(c, bubbleCenter, buttonSize, footprintWidth, labelHeight)
+            }
+        }
         val caption = placeCaption(bubbleCenter, bubbleRadius, finalButtons.map(::footprint), nameRect, captionSize, bounds, gap)
-        return QuickLayoutResult(finalButtons, caption, fellBack)
+        return QuickLayoutResult(finalButtons, caption, fellBack, labels)
     }
 
     /**
@@ -80,13 +90,25 @@ object QuickLayout {
      * the button is above the bubble, below it otherwise) so it never lands between the button and the bubble.
      */
     fun buttonFootprint(center: Offset, bubbleCenter: Offset, size: Float, width: Float, labelHeight: Float): Rect {
-        val labelAbove = center.y < bubbleCenter.y - 1f
-        return Rect(
-            center.x - width / 2f,
-            center.y - size / 2f - if (labelAbove) labelHeight else 0f,
-            center.x + width / 2f,
-            center.y + size / 2f + if (labelAbove) 0f else labelHeight,
-        )
+        val button = Rect(center.x - size / 2f, center.y - size / 2f, center.x + size / 2f, center.y + size / 2f)
+        val label = labelRect(center, bubbleCenter, size, width, labelHeight)
+        return Rect(min(button.left, label.left), min(button.top, label.top), max(button.right, label.right), max(button.bottom, label.bottom))
+    }
+
+    /**
+     * Where a button's label goes: pushed outward from the bubble along the direction from the bubble's center
+     * through the button, so a label sits beyond its button and never between the button and the bubble.
+     */
+    fun labelRect(center: Offset, bubbleCenter: Offset, size: Float, width: Float, height: Float): Rect {
+        var dx = center.x - bubbleCenter.x
+        var dy = center.y - bubbleCenter.y
+        val length = kotlin.math.sqrt(dx * dx + dy * dy)
+        if (length < 1f) { dx = 0f; dy = -1f } else { dx /= length; dy /= length }
+        val extent = abs(dx) * width / 2f + abs(dy) * height / 2f
+        val distance = size / 2f + size * 0.06f + extent
+        val cx = center.x + dx * distance
+        val cy = center.y + dy * distance
+        return Rect(cx - width / 2f, cy - height / 2f, cx + width / 2f, cy + height / 2f)
     }
 
     private fun distanceToRect(p: Offset, r: Rect): Float {

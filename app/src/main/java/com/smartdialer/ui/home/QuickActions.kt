@@ -3,6 +3,11 @@ package com.smartdialer.ui.home
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -72,6 +77,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Suggestion
 import com.smartdialer.llm.InstructionLimits
+import com.smartdialer.ui.components.OrbitIcons
 import com.smartdialer.ui.components.OrbitTextField
 import com.smartdialer.ui.components.SendButton
 import com.smartdialer.ui.theme.Orbit
@@ -108,6 +114,9 @@ sealed interface QuickActionKind {
 }
 
 /** One button on the arc. The arc lays out any number of these, so adding a button means adding a list entry. */
+/** Which color an action gets. Each action has its own, plus a distinct icon and label. */
+enum class QuickTone { Call, WhatsApp, Contact, Details, Ai }
+
 class QuickAction(
     val icon: ImageVector,
     /** Short, shown under the button. */
@@ -115,15 +124,21 @@ class QuickAction(
     /** The full phrase a screen reader says. */
     val description: String,
     val kind: QuickActionKind,
+    val tone: QuickTone,
+    /** A drawable that replaces [icon] (the WhatsApp glyph). */
+    val iconRes: Int? = null,
 )
 
 /** The buttons shown around a bubble, in arc order. */
 fun quickActionsFor(name: String, handlers: QuickActionHandlers): List<QuickAction> = listOf(
-    QuickAction(Icons.Filled.Call, "Call", "Call $name", QuickActionKind.Run(handlers.onCall)),
-    QuickAction(Icons.AutoMirrored.Filled.Chat, "WhatsApp", "Message $name on WhatsApp", QuickActionKind.Run(handlers.onWhatsApp)),
-    QuickAction(Icons.Filled.Person, "Contact", "Open the contact card for $name", QuickActionKind.Run(handlers.onContactCard)),
-    QuickAction(Icons.Filled.Info, "Details", "Open details for $name", QuickActionKind.Run(handlers.onDetails)),
-    QuickAction(Icons.Filled.EditNote, "Note", "Add an instruction about $name", QuickActionKind.Input(handlers.onSaveInstruction)),
+    QuickAction(Icons.Filled.Call, "Call", "Call $name", QuickActionKind.Run(handlers.onCall), QuickTone.Call),
+    QuickAction(
+        Icons.AutoMirrored.Filled.Chat, "WhatsApp", "Message $name on WhatsApp", QuickActionKind.Run(handlers.onWhatsApp),
+        QuickTone.WhatsApp, iconRes = com.smartdialer.R.drawable.ic_whatsapp,
+    ),
+    QuickAction(Icons.Filled.Person, "Contact", "Open the contact card for $name", QuickActionKind.Run(handlers.onContactCard), QuickTone.Contact),
+    QuickAction(Icons.Filled.Info, "Details", "Open details for $name", QuickActionKind.Run(handlers.onDetails), QuickTone.Details),
+    QuickAction(OrbitIcons.Sparkle, "Note", "Add an instruction about $name", QuickActionKind.Input(handlers.onSaveInstruction), QuickTone.Ai),
 )
 
 private const val LIFT_SCALE = 0.12f
@@ -264,8 +279,8 @@ fun QuickActionsOverlay(
             buttonProgress = { buttonProgress[it].value },
             showInput = inputMode,
             buttonCount = actions.size,
+            pressedIndex = { pressedIndex },
             modifier = Modifier.fillMaxSize(),
-            caption = { CaptionPill(target.suggestion.reason, Modifier.graphicsLayer { alpha = captionProgress.value }) },
             button = { index ->
                 val action = actions[index]
                 ArcButton(
@@ -320,8 +335,8 @@ private fun QuickArcLayout(
     buttonProgress: (Int) -> Float,
     showInput: Boolean,
     buttonCount: Int,
+    pressedIndex: () -> Int,
     modifier: Modifier,
-    caption: @Composable () -> Unit,
     button: @Composable (Int) -> Unit,
     label: @Composable (Int) -> Unit,
     input: @Composable () -> Unit,
@@ -330,7 +345,6 @@ private fun QuickArcLayout(
     Layout(
         modifier = modifier,
         content = {
-            Box(Modifier.layoutId("caption")) { caption() }
             repeat(buttonCount) { i -> Box(Modifier.layoutId(i)) { button(i) } }
             repeat(buttonCount) { i -> Box(Modifier.layoutId("label$i")) { label(i) } }
             if (showInput) Box(Modifier.layoutId("input")) { input() }
@@ -343,8 +357,6 @@ private fun QuickArcLayout(
             constraints.maxWidth - insets.getRight(this, layoutDirection) - margin.toFloat(),
             constraints.maxHeight - insets.getBottom(this) - margin.toFloat(),
         )
-        val maxCaption = min(Orbit.sizing.arcButton.roundToPx() * 6, bounds.width.roundToInt().coerceAtLeast(0))
-        val captionP = measurables.first { it.layoutId == "caption" }.measure(Constraints(maxWidth = maxCaption))
         val buttonPs = (0 until buttonCount).map { i -> measurables.first { it.layoutId == i }.measure(Constraints()) }
         val footprintWidth = Orbit.sizing.arcButton.toPx() + Orbit.spacing.sm.toPx()
         val labelPs = (0 until buttonCount).map { i ->
@@ -356,7 +368,8 @@ private fun QuickArcLayout(
         val buttonSize = Orbit.sizing.arcButton.toPx()
         // The room reserved for a label is fixed, so the arc does not change shape when labels show or hide.
         val labelHeight = (Orbit.spacing.xl - Orbit.spacing.xs).toPx()
-        val nameRect = Rect(anchor.left, anchor.top + diameterPx, anchor.right, anchor.bottom + diameterPx * LIFT_SCALE / 2f)
+        // Room for the name and, on the lifted copy, the red missed-call line under it.
+        val nameRect = Rect(anchor.left, anchor.top + diameterPx, anchor.right, anchor.bottom + diameterPx * LIFT_SCALE / 2f + 22.dp.toPx())
         val result = QuickLayout.place(
             bubbleCenter = circleCenter,
             bubbleRadius = bubbleRadiusPx,
@@ -364,9 +377,9 @@ private fun QuickArcLayout(
             buttonSize = buttonSize,
             labelHeight = labelHeight,
             nameRect = nameRect,
-            captionSize = Size(captionP.width.toFloat(), captionP.height.toFloat()),
+            captionSize = Size.Zero,
             bounds = bounds,
-            gap = Orbit.spacing.sm.toPx(),
+            gap = Orbit.spacing.md.toPx(),
         )
         val inputAt = inputP?.let {
             QuickLayout.placeBelowOrAbove(
@@ -378,7 +391,6 @@ private fun QuickArcLayout(
         }
 
         layout(constraints.maxWidth, constraints.maxHeight) {
-            captionP.place(result.captionTopLeft.x.roundToInt(), result.captionTopLeft.y.roundToInt())
             buttonPs.forEachIndexed { i, placeable ->
                 val target = result.buttonCenters[i]
                 val p = buttonProgress(i)
@@ -387,10 +399,15 @@ private fun QuickArcLayout(
                     circleCenter.y + (target.y - circleCenter.y) * p,
                 )
                 placeable.place((at.x - placeable.width / 2f).roundToInt(), (at.y - buttonSize / 2f).roundToInt())
+                // Labels go outward from the bubble along the arc direction. When even the arc did not fit
+                // (a row of buttons), only the pressed button shows its label.
                 val labelPlaceable = labelPs[i]
-                val labelAbove = target.y < circleCenter.y - 1f
-                val labelTop = if (labelAbove) at.y - buttonSize / 2f - labelPlaceable.height else at.y + buttonSize / 2f
-                labelPlaceable.place((at.x - labelPlaceable.width / 2f).roundToInt(), labelTop.roundToInt())
+                if (!result.fellBack || pressedIndex() == i) {
+                    val box = result.labelRects[i]
+                    val cx = box.center.x + (at.x - target.x)
+                    val cy = box.center.y + (at.y - target.y)
+                    labelPlaceable.place((cx - labelPlaceable.width / 2f).roundToInt(), (cy - labelPlaceable.height / 2f).roundToInt())
+                }
             }
             if (inputP != null && inputAt != null) inputP.place(inputAt.x.roundToInt(), inputAt.y.roundToInt())
         }
@@ -420,7 +437,10 @@ private fun ArcButton(
                 scaleX = scale
                 scaleY = scale
             }
-            .glassCircle(strong = true, elevation = Orbit.elevation.medium)
+            .shadow(Orbit.elevation.medium, CircleShape)
+            .clip(CircleShape)
+            .background(actionBrush(action.tone))
+            .border(Orbit.sizing.hairline, Color.White.copy(alpha = 0.35f), CircleShape)
             .clearAndSetSemantics {
                 contentDescription = action.description
                 role = Role.Button
@@ -428,12 +448,30 @@ private fun ArcButton(
             .clickable(interactionSource = interaction, indication = null, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(
-            action.icon,
-            contentDescription = null,
-            tint = if (pressed) Orbit.colors.accent else MaterialTheme.colorScheme.onBackground,
-            modifier = Modifier.size(Orbit.sizing.icon),
-        )
+        ActionGlyph(action, Modifier.size(27.dp))
+    }
+}
+
+@Composable
+internal fun actionBrush(tone: QuickTone): Brush {
+    val c = Orbit.colors
+    val style = when (tone) {
+        QuickTone.Call -> c.actionCall
+        QuickTone.WhatsApp -> c.actionWhatsApp
+        QuickTone.Contact -> c.actionContact
+        QuickTone.Details -> c.actionDetails
+        QuickTone.Ai -> c.actionAi
+    }
+    return Brush.linearGradient(listOf(style.top, style.bottom))
+}
+
+/** The white glyph of an action: its drawable when it has one (WhatsApp), otherwise its icon. */
+@Composable
+internal fun ActionGlyph(action: QuickAction, modifier: Modifier = Modifier) {
+    if (action.iconRes != null) {
+        Icon(painterResource(action.iconRes), contentDescription = null, tint = Color.White, modifier = modifier)
+    } else {
+        Icon(action.icon, contentDescription = null, tint = Color.White, modifier = modifier)
     }
 }
 
@@ -449,34 +487,6 @@ private fun ArcLabel(text: String, progress: () -> Float) {
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.graphicsLayer { alpha = progress().coerceIn(0f, 1f) },
     )
-}
-
-/** The "why this contact" note: a glass pill, visually separate from the round buttons. */
-@Composable
-private fun CaptionPill(reason: String, modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            // An opaque base under the glass, so the dimmed bubbles behind never show through the text.
-            .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.large)
-            .glass(MaterialTheme.shapes.large, strong = true, elevation = Orbit.elevation.medium)
-            .padding(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.md)
-            .semantics { liveRegion = LiveRegionMode.Polite },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            Modifier
-                .size(Orbit.spacing.sm)
-                .background(Orbit.colors.accent, CircleShape),
-        )
-        Box(Modifier.width(Orbit.spacing.md))
-        Text(
-            text = reason,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 3,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
 }
 
 /** The floating glass field that replaces the arc for "Note": type, then send. */

@@ -22,14 +22,20 @@ class QuickLayoutTest {
         return QuickLayout.place(center, radius, count, buttonSize, labelHeight, nameRect, caption, bounds, gap)
     }
 
-    private fun footprint(c: Offset, bubble: Offset) =
-        QuickLayout.buttonFootprint(c, bubble, buttonSize, buttonSize + gap, labelHeight)
+    private fun footprint(result: QuickLayoutResult, i: Int): Rect {
+        val c = result.buttonCenters[i]
+        val label = result.labelRects[i]
+        return Rect(
+            minOf(c.x - buttonSize / 2f, label.left), minOf(c.y - buttonSize / 2f, label.top),
+            maxOf(c.x + buttonSize / 2f, label.right), maxOf(c.y + buttonSize / 2f, label.bottom),
+        )
+    }
 
     private fun assertEverythingFits(x: Float, y: Float, radius: Float = 38f, count: Int = 5) {
         val result = layout(x, y, radius, count)
         val nameRect = Rect(x - 44f, y + radius + 2f, x + 44f, y + radius + 40f)
         result.buttonCenters.forEachIndexed { i, c ->
-            val box = footprint(c, Offset(x, y))
+            val box = footprint(result, i)
             assertTrue("button $i left at ($x,$y)", box.left >= bounds.left - 0.01f)
             assertTrue("button $i right at ($x,$y)", box.right <= bounds.right + 0.01f)
             assertTrue("button $i top at ($x,$y)", box.top >= bounds.top - 0.01f)
@@ -49,8 +55,8 @@ class QuickLayoutTest {
     @Test
     fun aBubbleInTheMiddleGetsAnArcAboveIt() {
         val result = layout(180f, 400f)
-        assertFalse(result.fellBack)
-        assertTrue(result.buttonCenters.all { it.y <= 410f })
+        assertFalse("fell back: ${result.buttonCenters}", result.fellBack)
+        assertTrue("centers ${result.buttonCenters}", result.buttonCenters.all { it.y <= 440f })
         assertEverythingFits(180f, 400f)
     }
 

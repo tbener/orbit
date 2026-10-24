@@ -78,9 +78,34 @@ The field (`OrbitLayout`, pure and unit-tested) is a structured set of rows, lik
 
 The field scrolls and loads more rows near its end (capped list). The bubbles are held perfectly still (no ambient drift); the top glow still breathes slowly.
 
-Controls are minimal: a slim translucent search pill, glass icon buttons (rules, add general
-instruction), a small pulsing dot next to the title while refreshing, and a floating "Open dialer" pill
-(accent gradient in dark, deep navy in light) with a soft glow.
+Controls are minimal. **Header:** the small gradient "Orbit" wordmark, the AI sparkle status, and three evenly spaced
+48dp glass buttons: add general instruction (sparkle), Rules, Settings. **Bottom bar:** a round glass search button
+next to the "Open dialer" pill (accent gradient in dark, deep navy in light), above the nav bar. **Reason card** (one
+place for the reason, above the bar): "Why Gil is first" for the top contact; while a bubble's quick actions are open
+it swaps (fade and slide) to that contact's "Why Mom is #6" and reason, and returns to the top contact on close. It is
+hidden while search is open.
+
+**Search:** tapping the button grows it into a field that rises above the bar and the keyboard (spring, focus and
+keyboard at once). The bubbles dim and blur, and a scrollable glass panel above the field shows, when the field is empty,
+up to 8 contacts as "Frequent" (most calls in 90 days) and "Recent" (latest calls), then matches while typing (all
+contacts, hidden ones labelled "Hidden from suggestions"). Results open the same actions as a bottom sheet. Closed by
+back, the close icon or a tap outside; reduced motion snaps.
+
+**AI sparkle convention:** one icon (`OrbitIcons.Sparkle`, a large four-point star with a small one) means "AI" everywhere:
+the "Note"/instruction actions and the header status. Status: shimmering while a real refresh runs (still with reduced
+motion), dimmed with a slash when AI is off or the last refresh failed (tap opens Settings), absent otherwise.
+
+## Action colors (tokens `Orbit.colors.action*`)
+
+| Action | Gradient (top to bottom) | Glyph |
+|---|---|---|
+| Call | `#1E88E5` to `#1565C0` | white phone |
+| WhatsApp | `#1DA851` to `#148A41` (WhatsApp green, darkened to reach 3:1 with the white glyph) | white WhatsApp glyph (`ic_whatsapp`) |
+| Contact card | `#8E5CF0` to `#6D3FD6` | white person |
+| Details | `#E06A22` to `#C4501A` | white info |
+| Note (AI) | `#7C5CFF` to `#0E8FC2` | white sparkle |
+
+Green is used only for WhatsApp. Every glyph is at least 3:1 on its circle, and each action also has its own icon and label.
 
 ## Quick actions
 

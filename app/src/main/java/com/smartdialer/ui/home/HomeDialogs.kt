@@ -1,6 +1,11 @@
 package com.smartdialer.ui.home
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import com.smartdialer.data.Contact
@@ -185,7 +191,10 @@ fun ContactActionsSheet(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.lg),
                     ) {
-                        Icon(action.icon, contentDescription = null, tint = Orbit.colors.accent)
+                        Box(
+                            Modifier.size(Orbit.sizing.touchTarget).clip(CircleShape).background(actionBrush(action.tone)),
+                            contentAlignment = Alignment.Center,
+                        ) { ActionGlyph(action, Modifier.size(26.dp)) }
                         Text(action.description, style = MaterialTheme.typography.bodyLarge)
                     }
                 }
