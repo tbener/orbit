@@ -58,7 +58,7 @@ class FallbackRankerTest {
         )
         val result = rank(contacts, calls)
         assertEquals(listOf("Mom", "Avi"), result.map { it.contact.name })
-        assertEquals("You usually talk every 3 days, and it's been 6.", result.first().reason)
+        assertTrue(result.first().reason.contains("about time to catch up"))
     }
 
     @Test

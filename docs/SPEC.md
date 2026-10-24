@@ -72,3 +72,7 @@ Everything Orbit stores or decides must be visible and editable by the user. Tha
 - **Off-topic:** classification can return `NOT_RANKING_RELATED`; the rule gets status `REJECTED_OFF_TOPIC`, is shown on the Rules page ("This doesn't affect who to call, so Orbit ignores it"), is never sent to ranking, and editing it re-classifies it. Unclassified rules are also not sent to ranking.
 - **Limits:** 300 characters per instruction (typing stops with a message), at most 30 (most recent) instructions per ranking request (a note on the Rules page says how many are kept but unused), and a 120,000-character payload cap (contacts from the end of the list are left out; the note appears in "What the LLM sees").
 - **Model output** is only ever used for ranking scores, reasons and rule classification (contact lookup by name for a hard rule). No code path opens, runs or sends anything based on model text.
+
+## Reason wording
+
+Reasons (the model's, in prompt `ranking-v4`, and the template reasons used without AI) give the single most relevant fact in plain, short language. No WhatsApp counts (say "You've been chatting on WhatsApp"), no statistics, and no "last spoke" timing unless it is the actual reason (a requested cadence, a same-day call to return). The Details summary shows no WhatsApp counts.

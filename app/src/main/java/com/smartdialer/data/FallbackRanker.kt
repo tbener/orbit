@@ -48,16 +48,18 @@ object FallbackRanker {
                     contact = contact,
                     subtitle = if (daysSinceMissed == 0L) "Missed today" else "Missed ${daysSinceMissed}d",
                     badge = SuggestionBadge.MissedCall,
-                    reason = "${contact.name} called ${agoPhrase(daysSinceMissed)} and you haven't called back.",
+                    reason = if (daysSinceMissed == 0L) "${contact.name} called today and you haven't called back." else "${contact.name} called and you haven't called back.",
                 ),
             )
         }
 
         val gapDays = typicalGapDays(events)
+        // Plain wording: no statistics, and timing only when it is the reason (a same-day call).
         val reason = when {
             daysSince == 0L -> "You spoke today."
-            gapDays != null -> "You usually talk every ${gapDays.roundToInt()} days, and it's been $daysSince."
-            else -> "You last spoke ${agoPhrase(daysSince)}."
+            gapDays != null && daysSince >= gapDays -> "It's about time to catch up with ${contact.name}."
+            gapDays != null -> "You're in regular touch with ${contact.name}."
+            else -> "A good moment to reach out to ${contact.name}."
         }
         return Scored(
             score = daysSince / (gapDays ?: DEFAULT_GAP_DAYS),
