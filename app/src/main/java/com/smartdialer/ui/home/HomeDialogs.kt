@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import com.smartdialer.data.Contact
+import com.smartdialer.llm.InstructionLimits
 import com.smartdialer.ui.components.OrbitTextField
 import com.smartdialer.ui.components.SendButton
 import com.smartdialer.ui.theme.Orbit
@@ -110,6 +111,7 @@ fun GeneralInstructionSheet(
                 value = text,
                 onValueChange = { text = it },
                 placeholder = "Instruction for all contacts",
+                maxLength = InstructionLimits.MAX_LENGTH,
                 minLines = 3,
                 shape = MaterialTheme.shapes.large,
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
@@ -192,6 +194,7 @@ fun ContactActionsSheet(
                     value = text,
                     onValueChange = { text = it },
                     placeholder = "Instruction about ${contact.name}",
+                    maxLength = InstructionLimits.MAX_LENGTH,
                     modifier = Modifier.fillMaxWidth().focusRequester(focus),
                     trailing = {
                         SendButton(

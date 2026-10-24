@@ -85,12 +85,14 @@ fun OrbitTextField(
     trailing: (@Composable () -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
     keyboardActions: KeyboardActions = KeyboardActions.Default,
+    /** Longest text accepted. Typing stops there and a short message says why. */
+    maxLength: Int? = null,
 ) {
     var focused by remember { mutableStateOf(false) }
     val colors = Orbit.colors
     BasicTextField(
         value = value,
-        onValueChange = onValueChange,
+        onValueChange = { text -> onValueChange(if (maxLength != null) text.take(maxLength) else text) },
         modifier = modifier
             .onFocusChanged { focused = it.isFocused }
             .semantics { contentDescription = label },
@@ -101,6 +103,7 @@ fun OrbitTextField(
         keyboardOptions = keyboardOptions,
         keyboardActions = keyboardActions,
         decorationBox = { inner ->
+          Column {
             Row(
                 modifier = Modifier
                     .glass(shape)
@@ -129,6 +132,15 @@ fun OrbitTextField(
                     trailing()
                 }
             }
+            if (maxLength != null && value.length >= maxLength) {
+                Text(
+                    text = "Limit reached: $maxLength characters.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Orbit.colors.alertText,
+                    modifier = Modifier.padding(start = Orbit.spacing.lg, top = Orbit.spacing.xs),
+                )
+            }
+          }
         },
     )
 }

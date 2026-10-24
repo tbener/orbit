@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.smartdialer.llm.InstructionLimits
 import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.TypedRuleParams
 import com.smartdialer.ui.components.GlassIconButton
@@ -66,6 +67,7 @@ internal fun FreeTextStatus.label(): String = when (this) {
     FreeTextStatus.SOFT -> "Soft preference"
     FreeTextStatus.CONVERTED_TO_TYPED -> "Hard rule"
     FreeTextStatus.NEEDS_REVIEW -> "Needs your review"
+    FreeTextStatus.REJECTED_OFF_TOPIC -> "Ignored (off-topic)"
 }
 
 internal fun TypedRuleParams.describe(name: String): String = when (this) {
@@ -161,6 +163,7 @@ internal fun AddRuleField(placeholder: String, onAdd: (String) -> Unit, modifier
         placeholder = placeholder,
         modifier = modifier.fillMaxWidth(),
         shape = SoftShape,
+        maxLength = InstructionLimits.MAX_LENGTH,
         trailing = { SendButton(enabled = text.isNotBlank(), description = "Add rule", onClick = ::submit) },
     )
 }

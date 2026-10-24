@@ -65,6 +65,8 @@ class RankingInputs(
     val pins: List<PinContext>,
     val hiddenCount: Int,
     val candidates: List<RankingCandidate>,
+    /** Instructions kept but not sent because of the per-request limit. */
+    val unusedInstructions: Int = 0,
 )
 
 /** Chooses who goes into the ranking call. Pure. */
@@ -90,8 +92,9 @@ object CandidateSelector {
             .filter { it.contact.lookupKey !in hidden && it.contact.lookupKey in contacts }
             .map { PinContext(it.contact.lookupKey, contacts.getValue(it.contact.lookupKey).name, it.slot) }
 
-        // Instructions that code already enforces are not repeated to the model.
-        val live = freeText.filter { it.status != FreeTextStatus.CONVERTED_TO_TYPED }.sortedWith(compareBy({ it.createdAt }, { it.id }))
+        // Only classified, ranking-related, soft instructions go to the model (never off-topic or unclassified ones,
+        // and not ones that code already enforces), and only the most recent few.
+        val live = InstructionLimits.selectForRanking(freeText)
         val general = live.filter { it.contactKey == null }.map { it.text }
         val byContact = live.filter { it.contactKey != null }.groupBy({ it.contactKey!! }, { it.text })
 
@@ -127,6 +130,7 @@ object CandidateSelector {
             pins = pins.filter { it.contactKey in kept },
             hiddenCount = hidden.count { it in contacts },
             candidates = candidates,
+            unusedInstructions = InstructionLimits.unusedCount(freeText),
         )
     }
 }

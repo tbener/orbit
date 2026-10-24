@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.Contact
 import com.smartdialer.data.ContactsRepository
 import com.smartdialer.data.SuggestionPipeline
+import com.smartdialer.llm.InstructionLimits
 import com.smartdialer.ranking.TraceEntry
 import com.smartdialer.rules.FreeTextRule
 import com.smartdialer.rules.FreeTextStatus
@@ -24,6 +25,8 @@ data class RulesUiState(
     val contacts: List<Contact>? = null,
     /** What the enforcement layer did with the typed rules the last time it ran. */
     val trace: List<TraceEntry> = emptyList(),
+    /** Instructions kept but not sent to the LLM because of the per-request limit. */
+    val unusedInstructions: Int = 0,
 )
 
 class RulesViewModel(
@@ -38,7 +41,7 @@ class RulesViewModel(
         contacts.contacts,
         pipeline.result,
     ) { freeText, typed, deviceContacts, enforced ->
-        RulesUiState(freeText, typed, deviceContacts?.map { it.contact }, enforced.trace)
+        RulesUiState(freeText, typed, deviceContacts?.map { it.contact }, enforced.trace, InstructionLimits.unusedCount(freeText))
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RulesUiState())
 
     fun addFreeText(text: String) {

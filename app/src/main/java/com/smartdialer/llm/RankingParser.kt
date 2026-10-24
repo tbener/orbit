@@ -53,11 +53,10 @@ object RankingParser {
                         val tier = Tier.parse(tierText) ?: Tier.fromScore(score).also {
                             issues += "Entry ${index + 1} ($key): tier \"$tierText\" is not valid, derived $it from the score."
                         }
-                        var reason = ((item["reason"] as? JsonPrimitive)?.contentOrNull).orEmpty().trim().replace(Regex("\\s+"), " ")
-                        if (reason.length > LlmConfig.MAX_REASON_LENGTH) {
-                            reason = reason.take(LlmConfig.MAX_REASON_LENGTH - 1).trimEnd() + "…"
-                            issues += "Entry ${index + 1} ($key): reason shortened."
-                        }
+                        val rawReason = (item["reason"] as? JsonPrimitive)?.contentOrNull
+                        // Plain text only: markup and links removed, shortened. Empty means "use the template reason".
+                        val reason = Sanitizer.cleanReason(rawReason).orEmpty()
+                        if (reason != rawReason.orEmpty().trim()) issues += "Entry ${index + 1} ($key): reason cleaned or shortened."
                         entries += ParsedEntry(key, score, tier, reason)
                     }
                 }

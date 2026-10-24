@@ -73,6 +73,8 @@ class RuleClassifier(
                 continue
             }
             when (val decision = ClassificationResolver.resolve(current, item, deviceContacts, MAX_SUGGESTIONS)) {
+                ClassificationDecision.OffTopic ->
+                    rules.setClassification(current.id, FreeTextStatus.REJECTED_OFF_TOPIC, InstructionLimits.OFF_TOPIC_MESSAGE)
                 is ClassificationDecision.Soft ->
                     rules.setClassification(current.id, FreeTextStatus.SOFT, decision.explanation)
                 is ClassificationDecision.Hard ->

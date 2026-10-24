@@ -26,6 +26,7 @@ enum class ModelAction { PIN_TO_SLOT, NEVER_SHOW, NONE }
 class ModelClassification(
     val ruleId: Long,
     val hard: Boolean,
+    val offTopic: Boolean,
     val action: ModelAction,
     val slot: Int,
     val personName: String,
@@ -58,8 +59,8 @@ object ClassificationPrompt {
                         add(
                             buildJsonObject {
                                 put("ruleId", rule.id)
-                                put("text", rule.text)
-                                put("about", rule.aboutName?.let(::JsonPrimitive) ?: kotlinx.serialization.json.JsonNull)
+                                put("text", Sanitizer.cleanInstruction(rule.text))
+                                put("about", rule.aboutName?.let { JsonPrimitive(Sanitizer.cleanName(it)) } ?: kotlinx.serialization.json.JsonNull)
                             },
                         )
                     }
@@ -91,7 +92,7 @@ object ClassificationPrompt {
                                     "properties",
                                     buildJsonObject {
                                         put("ruleId", buildJsonObject { put("type", "integer") })
-                                        put("kind", enumOf("HARD", "SOFT"))
+                                        put("kind", enumOf("HARD", "SOFT", "NOT_RANKING_RELATED"))
                                         put("action", enumOf("PIN_TO_SLOT", "NEVER_SHOW", "NONE"))
                                         put("slot", buildJsonObject { put("type", "integer") })
                                         put("personName", stringType())
@@ -143,18 +144,20 @@ object ClassificationParser {
                     val action = ModelAction.entries.firstOrNull {
                         it.name.equals((item["action"] as? JsonPrimitive)?.contentOrNull?.trim(), ignoreCase = true)
                     }
-                    if (kind == null || !(kind.equals("HARD", true) || kind.equals("SOFT", true)) || action == null) {
+                    val kinds = listOf("HARD", "SOFT", "NOT_RANKING_RELATED")
+                    if (kind == null || kinds.none { kind.equals(it, true) } || action == null) {
                         seen.remove(id)
                         issues += "Entry ${index + 1} (rule $id): kind or action is not valid, dropped."
                     } else {
                         items += ModelClassification(
                             ruleId = id,
                             hard = kind.equals("HARD", true),
+                            offTopic = kind.equals("NOT_RANKING_RELATED", true),
                             action = action,
                             slot = (item["slot"] as? JsonPrimitive)?.doubleOrNull?.toInt() ?: 0,
                             personName = ((item["personName"] as? JsonPrimitive)?.contentOrNull).orEmpty().trim(),
                             explanation = ((item["explanation"] as? JsonPrimitive)?.contentOrNull).orEmpty().trim().replace(Regex("\\s+"), " "),
-                        )
+                        ).let { it }
                     }
                 }
             }
@@ -167,6 +170,9 @@ object ClassificationParser {
 
 /** What to do with one classified rule. */
 sealed interface ClassificationDecision {
+    /** Nothing to do with who to call: kept and shown, never sent to ranking. */
+    data object OffTopic : ClassificationDecision
+
     class Soft(val explanation: String) : ClassificationDecision
 
     /** Create this typed rule and mark the free-text rule as converted. */
@@ -186,7 +192,8 @@ sealed interface NameMatch {
 object ClassificationResolver {
 
     fun resolve(rule: FreeTextRule, model: ModelClassification, contacts: List<Contact>, maxSlot: Int): ClassificationDecision {
-        val modelExplanation = model.explanation
+        if (model.offTopic) return ClassificationDecision.OffTopic
+        val modelExplanation = Sanitizer.cleanReason(model.explanation, 200).orEmpty()
         if (!model.hard || model.action == ModelAction.NONE) {
             return ClassificationDecision.Soft(
                 modelExplanation.ifBlank { "Soft: this guides the ranking but is not guaranteed." },

@@ -19,8 +19,8 @@ interface FreeTextRuleDao {
     /** Editing a soft or unclear rule sends it back for classification; a converted rule keeps its typed rule. */
     @Query(
         "UPDATE free_text_rules SET text = :text, " +
-            "status = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW') THEN 'UNCLASSIFIED' ELSE status END, " +
-            "explanation = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW') THEN NULL ELSE explanation END, " +
+            "status = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW', 'REJECTED_OFF_TOPIC') THEN 'UNCLASSIFIED' ELSE status END, " +
+            "explanation = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW', 'REJECTED_OFF_TOPIC') THEN NULL ELSE explanation END, " +
             "proposedType = NULL, proposedSlot = NULL WHERE id = :id",
     )
     suspend fun updateText(id: Long, text: String)

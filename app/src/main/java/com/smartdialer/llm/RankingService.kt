@@ -92,7 +92,14 @@ class RankingService(
         }
     }
 
-    private suspend fun rank(inputs: RankingInputs, hash: String): RefreshOutcome {
+    private suspend fun rank(fullInputs: RankingInputs, hash: String): RefreshOutcome {
+        val (inputs, leftOut) = RankingPrompt.fitToSize(fullInputs)
+        val limitNotes = buildList {
+            if (leftOut > 0) add("Limit reached: $leftOut contact(s) were left out because the request was too large.")
+            if (inputs.unusedInstructions > 0) {
+                add("Limit reached: only the ${InstructionLimits.MAX_PER_REQUEST} most recent instructions are sent; ${inputs.unusedInstructions} older one(s) are kept but not used.")
+            }
+        }
         _isRefreshing.value = true
         val result = try {
             llm.complete(RankingPrompt.request(inputs))
@@ -124,7 +131,7 @@ class RankingService(
             generatedAt = now,
         )
         cache.save(CachedRanking(entries, hash, Prompts.RANKING_VERSION, LlmConfig.MODEL, now))
-        exchanges.save(LlmExchange(RankingPrompt.PURPOSE, now, "Ranked ${parse.entries.size} of ${keys.size} contacts", result.requestBody, result.responseBody, parse.issues))
+        exchanges.save(LlmExchange(RankingPrompt.PURPOSE, now, "Ranked ${parse.entries.size} of ${keys.size} contacts", result.requestBody, result.responseBody, limitNotes + parse.issues))
         settings.recordSuccess(now)
         return RefreshOutcome.Updated
     }

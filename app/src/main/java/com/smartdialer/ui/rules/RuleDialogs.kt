@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.KeyboardType
 import com.smartdialer.data.Contact
+import com.smartdialer.llm.InstructionLimits
 import com.smartdialer.data.MAX_SUGGESTIONS
 import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.FreeTextRule
@@ -62,6 +63,7 @@ fun EditFreeTextDialog(
                 onValueChange = { text = it },
                 placeholder = "Rule",
                 minLines = 3,
+                maxLength = InstructionLimits.MAX_LENGTH,
                 modifier = Modifier.fillMaxWidth(),
             )
         },

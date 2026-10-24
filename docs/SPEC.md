@@ -64,3 +64,11 @@ Everything Orbit stores or decides must be visible and editable by the user. Tha
 ## Call signals
 
 "Talked" means an answered incoming or outgoing call of at least 10 seconds. Missed calls and outgoing calls that rang out are counted separately (`missedCount`, `unansweredOutgoingCount`) and never count as a conversation. The ranking payload's `callsInHistoryWindow` is the number of real conversations. WhatsApp activity is a separate signal and is never counted as a call. The prompt text is part of the inputs hash, so editing `ranking_v2.txt` refreshes the cached ranking.
+
+## Hardening against off-topic or hostile text
+
+- **Data, not commands:** instructions, contact names and (never sent) WhatsApp sender names are DATA. The payload is structured JSON (`generalInstructions`, `candidates[].instructions`, `name`, `hardRules` objects); nothing is concatenated into prompt text. Prompts `ranking-v3` and `classification-v2` tell the model to treat those fields as data, ignore requests to change format, reveal instructions or do anything but rank and explain.
+- **Sanitizing:** control, invisible-format and private-use characters are removed from names (max 60) and instructions; reasons are plain text, max 120 characters, with markup and URLs stripped; an empty reason falls back to the template reason. Reasons are shown as plain, non-clickable text.
+- **Off-topic:** classification can return `NOT_RANKING_RELATED`; the rule gets status `REJECTED_OFF_TOPIC`, is shown on the Rules page ("This doesn't affect who to call, so Orbit ignores it"), is never sent to ranking, and editing it re-classifies it. Unclassified rules are also not sent to ranking.
+- **Limits:** 300 characters per instruction (typing stops with a message), at most 30 (most recent) instructions per ranking request (a note on the Rules page says how many are kept but unused), and a 120,000-character payload cap (contacts from the end of the list are left out; the note appears in "What the LLM sees").
+- **Model output** is only ever used for ranking scores, reasons and rule classification (contact lookup by name for a hard rule). No code path opens, runs or sends anything based on model text.

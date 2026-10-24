@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.smartdialer.data.Suggestion
+import com.smartdialer.llm.InstructionLimits
 import com.smartdialer.ui.components.OrbitTextField
 import com.smartdialer.ui.components.SendButton
 import com.smartdialer.ui.theme.Orbit
@@ -491,6 +492,7 @@ private fun FloatingInput(name: String, modifier: Modifier, onSend: (String) -> 
         value = text,
         onValueChange = { text = it },
         placeholder = "Instruction about $name",
+        maxLength = InstructionLimits.MAX_LENGTH,
         shape = MaterialTheme.shapes.extraLarge,
         modifier = modifier.widthIn(min = Orbit.sizing.avatarLarge * 2).focusRequester(focus),
         trailing = { SendButton(enabled = text.isNotBlank(), description = "Save instruction about $name", onClick = { onSend(text.trim()) }) },

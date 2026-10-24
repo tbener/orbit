@@ -1,6 +1,7 @@
 package com.smartdialer.data.db
 
 import androidx.room.withTransaction
+import com.smartdialer.llm.InstructionLimits
 import com.smartdialer.rules.FreeTextRule
 import com.smartdialer.rules.FreeTextStatus
 import com.smartdialer.rules.RulesRepository
@@ -27,7 +28,7 @@ class RoomRulesRepository(
     override suspend fun addFreeTextRule(text: String, contactKey: String?): Long =
         freeText.insert(
             FreeTextRuleEntity(
-                text = text.trim(),
+                text = text.trim().take(InstructionLimits.MAX_LENGTH),
                 createdAt = nowMillis(),
                 status = FreeTextStatus.UNCLASSIFIED,
                 typedRuleId = null,
@@ -35,7 +36,8 @@ class RoomRulesRepository(
             ),
         )
 
-    override suspend fun updateFreeTextRule(id: Long, text: String) = freeText.updateText(id, text.trim())
+    override suspend fun updateFreeTextRule(id: Long, text: String) =
+        freeText.updateText(id, text.trim().take(InstructionLimits.MAX_LENGTH))
 
     override suspend fun setClassification(
         id: Long,

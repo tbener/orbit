@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.smartdialer.ranking.TraceEntry
+import com.smartdialer.llm.InstructionLimits
 import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.FreeTextRule
 import com.smartdialer.rules.FreeTextStatus
@@ -112,6 +113,17 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                     item(key = "free-add") {
                         AddRuleField(placeholder = "Add a general instruction", onAdd = actions.addFreeText)
                     }
+                    if (state.unusedInstructions > 0) {
+                        item(key = "free-limit") {
+                            Text(
+                                "Only the ${InstructionLimits.MAX_PER_REQUEST} most recent instructions are used for ranking. " +
+                                    "${state.unusedInstructions} older one${if (state.unusedInstructions == 1) " is" else "s are"} kept but not used. Delete some to use them again.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Orbit.colors.alertText,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
                     item(key = "free-filter") {
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
@@ -182,6 +194,7 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                                                 RuleActionButton("Choose contact", RuleKind.Solid) { pending = Pending.MakeHard(rule) }
                                                 RuleActionButton("Keep soft", RuleKind.Soft) { actions.keepSoft(rule.id) }
                                             }
+                                            FreeTextStatus.REJECTED_OFF_TOPIC -> Unit
                                             FreeTextStatus.SOFT, FreeTextStatus.UNCLASSIFIED ->
                                                 RuleActionButton("Make hard", RuleKind.Solid) { pending = Pending.MakeHard(rule) }
                                         }

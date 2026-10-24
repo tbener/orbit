@@ -10,8 +10,9 @@ import kotlinx.serialization.json.Json
  * - [SOFT]: a preference the LLM reads when ranking; code does not enforce it.
  * - [CONVERTED_TO_TYPED]: it became a typed rule, which code enforces.
  * - [NEEDS_REVIEW]: it looks like a hard rule but the contact is unclear; the user has to pick one.
+ * - [REJECTED_OFF_TOPIC]: it has nothing to do with who to call; it is kept, shown, and never sent to the LLM.
  */
-enum class FreeTextStatus { UNCLASSIFIED, SOFT, CONVERTED_TO_TYPED, NEEDS_REVIEW }
+enum class FreeTextStatus { UNCLASSIFIED, SOFT, CONVERTED_TO_TYPED, NEEDS_REVIEW, REJECTED_OFF_TOPIC }
 
 /** A rule written in natural language. Interpreted by the LLM; never enforced by code. */
 data class FreeTextRule(

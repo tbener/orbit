@@ -33,6 +33,23 @@ object RankingPrompt {
 
     private val compact = Json { encodeDefaults = true }
 
+    /**
+     * Keeps the request under [InstructionLimits.MAX_PAYLOAD_CHARS] by leaving out contacts from the end of the
+     * list. Returns the inputs to send and how many contacts were left out.
+     */
+    fun fitToSize(inputs: RankingInputs): Pair<RankingInputs, Int> {
+        var kept = inputs.candidates
+        while (kept.size > 1 && userMessage(copyWith(inputs, kept)).length > InstructionLimits.MAX_PAYLOAD_CHARS) {
+            kept = kept.dropLast(maxOf(1, kept.size / 20))
+        }
+        return copyWith(inputs, kept) to (inputs.candidates.size - kept.size)
+    }
+
+    private fun copyWith(i: RankingInputs, candidates: List<RankingCandidate>) = RankingInputs(
+        i.nowMillis, i.zone, i.generalInstructions, i.pins.filter { p -> candidates.any { it.contact.id == p.contactKey } },
+        i.hiddenCount, candidates, i.unusedInstructions,
+    )
+
     fun userMessage(inputs: RankingInputs): String = compact.encodeToString(JsonObject.serializer(), payload(inputs))
 
     fun payload(inputs: RankingInputs): JsonObject {
@@ -48,14 +65,20 @@ object RankingPrompt {
                     put("timezone", inputs.zone.id)
                 },
             )
-            put("generalInstructions", JsonArray(inputs.generalInstructions.map(::JsonPrimitive)))
+            put("generalInstructions", JsonArray(inputs.generalInstructions.map { JsonPrimitive(Sanitizer.cleanInstruction(it)) }))
             put(
                 "hardRules",
-                JsonArray(
-                    inputs.pins.map {
-                        JsonPrimitive("${it.name} (contactKey ${it.contactKey}) is always shown in slot ${it.slot} by the user's own rule; code enforces it.")
-                    },
-                ),
+                buildJsonArray {
+                    inputs.pins.forEach {
+                        add(
+                            buildJsonObject {
+                                put("contactKey", it.contactKey)
+                                put("name", Sanitizer.cleanName(it.name))
+                                put("slot", it.slot)
+                            },
+                        )
+                    }
+                },
             )
             put("hiddenContacts", inputs.hiddenCount)
             put(
@@ -66,7 +89,7 @@ object RankingPrompt {
                         add(
                             buildJsonObject {
                                 put("contactKey", candidate.contact.id)
-                                put("name", candidate.contact.name)
+                                put("name", Sanitizer.cleanName(candidate.contact.name))
                                 put(
                                     "signals",
                                     buildJsonObject {
@@ -95,7 +118,7 @@ object RankingPrompt {
                                         }
                                     },
                                 )
-                                put("instructions", JsonArray(candidate.instructions.map(::JsonPrimitive)))
+                                put("instructions", JsonArray(candidate.instructions.map { JsonPrimitive(Sanitizer.cleanInstruction(it)) }))
                             },
                         )
                     }
