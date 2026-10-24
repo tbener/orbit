@@ -44,3 +44,11 @@ Everything Orbit stores or decides must be visible and editable by the user. Tha
 3b. Quick actions and instructions UI
 4. LLM integration: ranking, reasons, rule classification, caching, background refresh
 5. Recurring-pattern signals and polish
+
+## Stage 4 as built: LLM integration
+
+- **API:** Anthropic Messages API (`POST /v1/messages`, `anthropic-version 2026-10-21`), structured output via `output_config.format` (JSON schema), no sampling parameters. The model is the single constant `LlmConfig.MODEL` (`claude-sonnet-5-5`; switch to `claude-haiku-5-5` there). Key: `LLM_API_KEY` in `local.properties`.
+- **Ranking call (`ranking-v1`):** input is the date, weekday, time of day, time zone, general instructions, pins as context only, and up to 100 candidates (contacts with recent calls plus any with instructions or pins; NEVER_SHOW contacts excluded). Output per contact: `contactKey`, `score` 0-100, `tier` (top/high/normal/low), one-sentence `reason`. The answer is validated strictly (unknown/duplicate keys dropped, values clamped, omitted contacts filled in fallback-ranker order); an unusable answer keeps the previous cache.
+- **Classification call (`classification-v1`):** each new free-text rule becomes HARD (maps exactly onto PIN_TO_SLOT or NEVER_SHOW) or SOFT, with a one-sentence explanation. Names are resolved in code against device contacts; ambiguous or missing names become NEEDS_REVIEW and are never guessed. The user can override any classification on the Rules page.
+- **Cache and refresh:** latest ranking in Room (`ranking_cache`) with inputs hash, prompt version and model. Shown first on open, always run through `RuleEnforcer`. Refreshed in the background when older than 3 hours or the inputs hash changed; WorkManager every 6 hours (network required); "Refresh now" in Settings. Failures are quiet: last good result kept, small indicator, retry after 15 minutes.
+- **Settings:** AI switch (off means fallback ranker only, no network), one-time disclosure required before the first call, last refresh status, and "What the LLM sees" (the last real request, raw answer and validation issues, stored as sent).

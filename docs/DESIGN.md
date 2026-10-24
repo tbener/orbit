@@ -94,6 +94,10 @@ Labels sit on the outer side of each button; on large fonts only the pressed but
 with a send button. A haptic tick on open and on choosing; dismiss by tapping outside or back. The actions
 are a plain list (`quickActionsFor`), so adding a button needs no layout change.
 
+## Settings
+
+A gear button next to Rules opens Settings: the AI switch, last update and status, "Refresh now", and "What the LLM sees" (request, raw answer, validation issues, monospace and selectable). A small cloud-off icon appears next to the title when the last refresh failed; the last good suggestions stay on screen.
+
 ## Rules and Details
 
 Same language: ink background, glass cards, Outfit. The two rule families look different on purpose:

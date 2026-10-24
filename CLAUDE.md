@@ -29,6 +29,14 @@ Everything Orbit stores or decides must be visible and editable by the user: fre
 - Stage 4 includes a screen showing how each instruction was classified, with a way to correct it.
 - Later item (not yet built): a "Hidden contacts" section listing all contacts under a NEVER_SHOW rule, each with a "Bring back" action.
 
+## LLM data contract and privacy
+- Sent to the Anthropic API: contact display name and opaque lookup key, call-history signals (days since last call, unreturned missed calls, call counts), the user's instructions, pins as context, date/time/time zone. **Never** sent: phone numbers, emails, photos, notes, or anything else from a contact.
+- Nothing is sent until the user accepts the one-time disclosure; the AI switch off means no network calls at all. Prompts live in `app/src/main/resources/prompts/` with a version constant in `llm/Prompts.kt`; the version is stored with each result.
+- Enforcement stays deterministic: the cached ranking always passes through `RuleEnforcer` with the current typed rules. The LLM never overrides a hard rule.
+
+## Home layout rule
+Rows, not rings: top bubble largest and centered with #2 and #3 either side, then a grid of four per row, each row slightly smaller; names and subtitles under every bubble; no bubble sits on a ring (`OrbitLayout`, pure and tested).
+
 ## Conventions
 - Hard-rule enforcement stays deterministic and separate from the LLM layer: `ranking/` must not call or depend on `llm/`, and its output is final over the LLM's.
 - Keep free-text rules and typed rules as separate models and lists. Rules reference contacts by lookup key (`Contact.id`), never by name or number.

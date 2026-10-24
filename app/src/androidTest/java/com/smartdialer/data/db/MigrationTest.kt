@@ -94,4 +94,22 @@ class MigrationTest {
             db.close()
         }
     }
+
+    @Test
+    fun migrate2To3_keepsRulesAddsClassificationColumnsAndNewTables() {
+        helper.createDatabase(dbName, 2).apply {
+            execSQL("INSERT INTO free_text_rules (id, text, createdAt, status, typedRuleId, contactKey) VALUES (1, 'old', 100, 'SOFT', NULL, 'k')")
+            close()
+        }
+        val db = helper.runMigrationsAndValidate(dbName, 3, true, OrbitDatabase.MIGRATION_2_3)
+        db.query("SELECT text, status, contactKey, explanation, proposedType, proposedSlot FROM free_text_rules").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals("old", c.getString(0))
+            assertEquals("SOFT", c.getString(1))
+            assertEquals("k", c.getString(2))
+            assertTrue(c.isNull(3) && c.isNull(4) && c.isNull(5))
+        }
+        db.execSQL("INSERT INTO ranking_cache VALUES ('k', 1, 90, 'TOP', 'why', 'LLM', 5, 'h', 'ranking-v1', 'm')")
+        db.execSQL("INSERT INTO llm_exchanges VALUES ('ranking', 5, 'ok', 'req', 'resp', '')")
+    }
 }
