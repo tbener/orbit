@@ -75,7 +75,7 @@ The field (`OrbitLayout`, pure) has three layouts, chosen in Settings with a sma
 
 In every layout each bubble has only its name under it, the list scrolls and loads more rows (capped), nothing sits on a ring
 (a faint halo only in Spotlight), and slot numbers are rank positions. Rank changes animate bubbles to their new places; the
-bubbles are otherwise still, and the glow behind #1 breathes. A pinned bubble shows a small pin marker. Tap opens the quick actions; press and hold lifts a bubble (scale and a brighter glow): drag
+bubbles are otherwise still, and the glow behind #1 is still. A pinned bubble shows a small pin marker. Tap opens the quick actions; press and hold lifts a bubble (scale and a brighter glow): drag
 it and the others slide aside with the rank-change animation, a ring with the slot number shows where it will land (in Spotlight it
 takes the size of that slot), and the field scrolls near the top and bottom edges. A pinned slot is not a valid target: no ring,
 a small not-allowed cue and a soft haptic, and a drop there glides back. Releasing a hold without moving pins or unpins at the slot.
@@ -138,7 +138,7 @@ field with a send button replace the stock ones; empty states are short and a li
 ## Motion
 
 Tokens in `Motion`: 120 / 220 / 340 ms; entering things decelerate, leaving things accelerate and are
-quicker; springs for the arc and the lift. Bubbles fade and scale in once, staggered. The top glow breathing (5s) is the only ambient motion; bubbles do not drift. **Reduced motion:** when system animations are
+quicker; springs for the arc and the lift. Bubbles fade and scale in once, staggered. There is no ambient motion: nothing animates on its own while the user does nothing. **Reduced motion:** when system animations are
 off, every spec snaps and the breathing and pulse are not run.
 
 ## Planned UX tweaks

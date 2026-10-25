@@ -113,14 +113,6 @@ fun OrbitField(
     val scroll = rememberScrollState()
     val seen = remember { mutableSetOf<String>() }
 
-    val ambient = if (motion.reduced) null else rememberInfiniteTransition(label = "ambient")
-    val breathe: State<Float>? = ambient?.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(motion.breatheMillis, easing = LinearEasing), RepeatMode.Restart),
-        label = "breathe",
-    )
-
     BoxWithConstraints(modifier.fillMaxSize()) {
         val width = maxWidth.value
         val layout = remember(suggestions.size, width, labelScale, mode) { OrbitLayout.compute(suggestions.size, width, labelScale, mode) }
@@ -248,16 +240,21 @@ fun OrbitField(
                 Modifier
                     .fillMaxWidth()
                     .height(contentHeight)
-                    .drawBehind {
+            ) {
+                // A still glow behind the top bubble. Nothing in the field animates on its own: a perpetual animation
+                // keeps the screen redrawing 60 times a second even when the user does nothing (battery, heat).
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .drawBehind {
                         if (suggestions.isEmpty()) return@drawBehind
                         val center = Offset(layout.center.x.dp.toPx(), layout.center.y.dp.toPx())
-                        val pulse = 0.88f + 0.12f * sin(2f * PI.toFloat() * (breathe?.value ?: 0f))
                         // A soft glow behind the top bubble.
                         val glowRadius = (if (mode == LayoutMode.Spotlight) 250 else 170).dp.toPx()
                         drawCircle(
                             brush = Brush.radialGradient(
-                                0f to colors.heroGlow.copy(alpha = (if (colors.isDark) 0.34f else 0.50f) * pulse),
-                                0.55f to colors.heroGlow.copy(alpha = (if (colors.isDark) 0.10f else 0.18f) * pulse),
+                                0f to colors.heroGlow.copy(alpha = (if (colors.isDark) 0.34f else 0.50f)),
+                                0.55f to colors.heroGlow.copy(alpha = (if (colors.isDark) 0.10f else 0.18f)),
                                 1f to Color.Transparent,
                                 center = center,
                                 radius = glowRadius,
@@ -274,8 +271,8 @@ fun OrbitField(
                                 style = Stroke(width = 1.dp.toPx()),
                             )
                         }
-                    },
-            ) {
+                        },
+                )
                 if (suggestions.isEmpty()) {
                     Box(Modifier.fillMaxWidth().offset(y = 64.dp), contentAlignment = Alignment.TopCenter) { empty() }
                 }
