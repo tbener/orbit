@@ -53,6 +53,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -132,7 +134,7 @@ fun OrbitField(
         var dragId by remember { mutableStateOf<String?>(null) }
         var dragFrom by remember { mutableIntStateOf(-1) }
         var dragDelta by remember { mutableStateOf(Offset.Zero) }
-        var scrollStart by remember { mutableIntStateOf(0) }
+        var pressedId by remember { mutableStateOf<String?>(null) }
         var target by remember { mutableIntStateOf(-1) }
         val pinnedSlotSet = pinnedSlots.values.toSet()
         fun blocked(index: Int) = index >= 0 && index != dragFrom && (index + 1) in pinnedSlotSet
@@ -153,7 +155,7 @@ fun OrbitField(
         fun dragCenter(): Offset {
             val origin = layout.slots[dragFrom].center
             val d = density.density
-            return Offset(origin.x + dragDelta.x / d, origin.y + dragDelta.y / d + (scroll.value - scrollStart) / d)
+            return Offset(origin.x + dragDelta.x / d, origin.y + dragDelta.y / d)
         }
 
         fun updateTarget() {
@@ -170,7 +172,6 @@ fun OrbitField(
             dragId = ids[index]
             dragFrom = index
             dragDelta = Offset.Zero
-            scrollStart = scroll.value
             target = index
             onDragActive(true)
         }
@@ -188,7 +189,7 @@ fun OrbitField(
                         val d = density.density
                         val c = layout.slots[to].center
                         val o = layout.slots[from].center
-                        Offset((c.x - o.x) * d, (c.y - o.y) * d - (scroll.value - scrollStart))
+                        Offset((c.x - o.x) * d, (c.y - o.y) * d)
                     }
                 }
                 if (settle != null && !motion.reduced) {
@@ -207,13 +208,17 @@ fun OrbitField(
         LaunchedEffect(dragId) {
             while (dragId != null) {
                 val d = density.density
-                val y = layout.slots[dragFrom].center.y * d - scrollStart + dragDelta.y
+                // The finger's place on screen: where the bubble is in the field, minus how far the field has scrolled.
+                val y = layout.slots[dragFrom].center.y * d + dragDelta.y - scroll.value
                 val edge = with(density) { 96.dp.toPx() }
                 val bottomLimit = constraints.maxHeight - with(density) { bottomInset.toPx() } - edge / 2f
-                when {
+                val scrolled = when {
                     y < edge -> scroll.scrollBy(-20f)
                     y > bottomLimit -> scroll.scrollBy(20f)
+                    else -> 0f
                 }
+                // A still finger sees the field move under it: keep the bubble with it until the next touch event.
+                dragDelta += Offset(0f, scrolled)
                 updateTarget()
                 delay(16)
             }
@@ -300,6 +305,34 @@ fun OrbitField(
                         }
                     }
                 }
+                // Gestures live on still overlays over each bubble's original slot, so positions stay stable while one is dragged.
+                suggestions.forEachIndexed { original, suggestion ->
+                    key("gesture-${suggestion.contact.id}") {
+                        val s = layout.slots[original]
+                        val w = maxOf(s.diameter, s.labelWidth)
+                        var bounds by remember { mutableStateOf(Rect.Zero) }
+                        Box(
+                            Modifier
+                                .offset((s.center.x - w / 2f).dp, (s.center.y - s.diameter / 2f).dp)
+                                .size(w.dp, (s.diameter + s.labelHeight).dp)
+                                .zIndex(20f)
+                                .onGloballyPositioned { bounds = it.boundsInWindow() }
+                                .bubbleGestures(
+                                    onPressedChange = { pressedId = if (it) suggestion.contact.id else null },
+                                    onTap = { onGesture(IndexedValue(original, suggestion), s, BubbleGesture.Tap, bounds) },
+                                    onHoldRelease = { onGesture(IndexedValue(original, suggestion), s, BubbleGesture.LongPress, bounds) },
+                                    drag = {
+                                        BubbleDragCallbacks(
+                                            enabled = { dragEnabled },
+                                            onStart = { startDrag(original) },
+                                            onMove = { offset -> dragDelta = offset; updateTarget() },
+                                            onEnd = ::finishDrag,
+                                        )
+                                    },
+                                ),
+                        )
+                    }
+                }
                 ordered.forEachIndexed { index, suggestion ->
                     val slot = layout.slots[index]
                     key(suggestion.contact.id) {
@@ -347,12 +380,7 @@ fun OrbitField(
                                 onGesture = { gesture, bounds ->
                                     onGesture(IndexedValue(original, suggestion), originalSlot, gesture, bounds)
                                 },
-                                drag = BubbleDragCallbacks(
-                                    enabled = { dragEnabled },
-                                    onStart = { startDrag(original) },
-                                    onMove = { delta -> dragDelta += delta; updateTarget() },
-                                    onEnd = ::finishDrag,
-                                ),
+                                pressed = pressedId == id,
                                 onMoveRequest = { onMoveRequest(suggestion, original + 1) },
                                 modifier = Modifier.width(labelWidth.dp),
                             )

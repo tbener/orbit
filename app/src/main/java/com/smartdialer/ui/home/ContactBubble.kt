@@ -84,15 +84,6 @@ class OrbStyle(val initialsSp: Int, val badge: Dp, val glow: Float) {
     }
 }
 
-/** What a drag of a bubble reports. [onMove] gets the finger movement in pixels. */
-class BubbleDragCallbacks(
-    val enabled: () -> Boolean,
-    val onStart: () -> Unit,
-    val onMove: (Offset) -> Unit,
-    /** [moved] is false when the hold was released without moving. */
-    val onEnd: (moved: Boolean) -> Unit,
-)
-
 /**
  * A contact bubble: the orb with its name (and, on the inner rings, a subtitle) underneath. When
  * [onGesture] is null the bubble is display-only (used for the lifted copy above the dimmed screen). The
@@ -112,8 +103,8 @@ fun ContactBubble(
     showMissed: Boolean = false,
     onGesture: ((BubbleGesture, Rect) -> Unit)?,
     modifier: Modifier = Modifier,
-    /** Hold-then-drag callbacks; null turns dragging off. */
-    drag: BubbleDragCallbacks? = null,
+    /** The bubble is being pressed (it squeezes slightly). */
+    pressed: Boolean = false,
     /** The TalkBack action "Move to position...", an alternative to dragging. */
     onMoveRequest: (() -> Unit)? = null,
     /** 0 to 1: how far the bubble has lifted forward (the quick-actions copy), which brightens its glow. */
@@ -140,11 +131,6 @@ fun ContactBubble(
         else -> MaterialTheme.typography.labelMedium
     }
 
-    val haptic = LocalHapticFeedback.current
-    val currentOnGesture by rememberUpdatedState(onGesture)
-    val currentDrag by rememberUpdatedState(drag)
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
     // Pressing a bubble squeezes it slightly. (No ripple: a clipped ripple would also cut off the glow.)
     val pressScale by animateFloatAsState(if (pressed) 0.94f else 1f, Orbit.motion.move(120), label = "press")
 
@@ -155,53 +141,6 @@ fun ContactBubble(
                 scaleX = pressScale
                 scaleY = pressScale
             }
-            .then(
-                if (onGesture == null) {
-                    Modifier
-                } else {
-                    // Tap, or press and hold (a light haptic): moving the finger drags, releasing in place long-presses.
-                    Modifier.pointerInput(Unit) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            interaction.tryEmit(PressInteraction.Press(down.position))
-                            var completed = false
-                            var up: androidx.compose.ui.input.pointer.PointerInputChange? = null
-                            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                                up = waitForUpOrCancellation()
-                                completed = true
-                            }
-                            if (completed) {
-                                interaction.tryEmit(PressInteraction.Release(PressInteraction.Press(down.position)))
-                                val released = up
-                                if (released != null && (released.position - down.position).getDistance() <= viewConfiguration.touchSlop) {
-                                    released.consume()
-                                    currentOnGesture?.invoke(BubbleGesture.Tap, bounds)
-                                }
-                                return@awaitEachGesture
-                            }
-                            // Held long enough.
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            val callbacks = currentDrag?.takeIf { it.enabled() }
-                            callbacks?.onStart?.invoke()
-                            var travelled = 0f
-                            var moved = false
-                            val finished = drag(down.id) { change ->
-                                val delta = change.positionChange()
-                                change.consume()
-                                travelled += delta.getDistance()
-                                if (travelled > viewConfiguration.touchSlop) moved = true
-                                if (moved) callbacks?.onMove?.invoke(delta)
-                            }
-                            interaction.tryEmit(PressInteraction.Release(PressInteraction.Press(down.position)))
-                            when {
-                                callbacks != null && finished && moved -> callbacks.onEnd(true)
-                                callbacks != null -> { callbacks.onEnd(false); if (finished) currentOnGesture?.invoke(BubbleGesture.LongPress, bounds) }
-                                finished -> currentOnGesture?.invoke(BubbleGesture.LongPress, bounds)
-                            }
-                        }
-                    }
-                },
-            )
             .semantics(mergeDescendants = true) {
                 contentDescription = description
                 stateDescription = if (selected) "Selected" else ""
