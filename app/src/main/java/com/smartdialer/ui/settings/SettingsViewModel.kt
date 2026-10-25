@@ -3,7 +3,10 @@ package com.smartdialer.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.AiSuggestionsRepository
+import com.smartdialer.data.LayoutMode
+import com.smartdialer.data.UiSettings
 import com.smartdialer.data.WhatsAppEventStore
+import com.smartdialer.llm.RefreshQuota
 import com.smartdialer.data.WhatsAppSettings
 import com.smartdialer.llm.AiSettings
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +38,10 @@ data class SettingsUiState(
     /** Notification access is granted in the system settings. */
     val whatsAppGranted: Boolean = false,
     val whatsAppEventCount: Int = 0,
+    val layoutMode: LayoutMode = LayoutMode.Grid3,
+    /** Ranking refreshes started today, and the daily cap. */
+    val refreshCountToday: Int = 0,
+    val refreshCap: Int = RefreshQuota.DAILY_CAP,
 )
 
 data class InspectorUiState(
@@ -51,6 +58,7 @@ class SettingsViewModel(
     apiKeyMissing: Boolean,
     private val whatsAppSettings: WhatsAppSettings,
     private val whatsAppStore: WhatsAppEventStore,
+    private val uiSettings: UiSettings,
 ) : ViewModel() {
 
     private val whatsAppGranted = MutableStateFlow(false)
@@ -67,8 +75,11 @@ class SettingsViewModel(
     val state: StateFlow<SettingsUiState> = combine(
         combine(settings.state, cache.ranking, service.isRefreshing) { s, ranking, refreshing -> Triple(s, ranking, refreshing) },
         whatsAppState,
-    ) { (s, ranking, refreshing), (waEnabled, waGranted, waCount) ->
+        uiSettings.layoutMode,
+    ) { (s, ranking, refreshing), (waEnabled, waGranted, waCount), layout ->
         SettingsUiState(
+            layoutMode = layout,
+            refreshCountToday = RefreshQuota.countToday(s, java.time.LocalDate.now()),
             whatsAppEnabled = waEnabled,
             whatsAppGranted = waGranted,
             whatsAppEventCount = waCount,
@@ -99,6 +110,8 @@ class SettingsViewModel(
         settings.setEnabled(true)
     }
 
+    fun setLayoutMode(mode: LayoutMode) = uiSettings.setLayoutMode(mode)
+
     fun setWhatsAppEnabled(enabled: Boolean) = whatsAppSettings.setEnabled(enabled)
 
     fun deleteWhatsAppData() {
@@ -106,6 +119,6 @@ class SettingsViewModel(
     }
 
     fun refreshNow() {
-        viewModelScope.launch { suggestions.refreshNow() }
+        viewModelScope.launch { suggestions.refreshManual() }
     }
 }

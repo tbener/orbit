@@ -136,6 +136,13 @@ object RankingPrompt {
         else -> "night"
     }
 
+    /** The instructions part of the input only: when it changes, the model needs to be asked again. */
+    fun instructionSignature(inputs: RankingInputs): String = buildString {
+        append(inputs.generalInstructions.sorted().joinToString("|")).append('\n')
+        inputs.candidates.filter { it.instructions.isNotEmpty() }.sortedBy { it.contact.id }
+            .forEach { append(it.contact.id).append('=').append(it.instructions.sorted().joinToString("|")).append('\n') }
+    }
+
     /**
      * What the ranking depends on, as a hash: the instructions, the pins and hidden contacts, each
      * candidate's key, name and raw call timestamps, the prompt version and the model. It deliberately

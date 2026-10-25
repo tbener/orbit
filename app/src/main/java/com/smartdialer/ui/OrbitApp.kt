@@ -37,6 +37,7 @@ import com.smartdialer.BuildConfig
 import com.smartdialer.OrbitApplication
 import com.smartdialer.data.hasNotificationAccess
 import com.smartdialer.ui.settings.AiDisclosureDialog
+import kotlinx.coroutines.flow.map
 import com.smartdialer.ui.settings.WhatsAppPrompt
 import com.smartdialer.ui.settings.LlmInspectorScreen
 import com.smartdialer.ui.settings.SettingsActions
@@ -74,6 +75,8 @@ fun OrbitApp() {
                     aiSettings = container.aiSettings,
                     whatsAppStore = container.whatsAppStore,
                     whatsAppSettings = container.whatsAppSettings,
+                    uiSettings = container.uiSettings,
+                    ai = container.aiSuggestions,
                 )
             }
         },
@@ -90,6 +93,7 @@ fun OrbitApp() {
                     apiKeyMissing = BuildConfig.LLM_API_KEY.isBlank(),
                     whatsAppSettings = container.whatsAppSettings,
                     whatsAppStore = container.whatsAppStore,
+                    uiSettings = container.uiSettings,
                 )
             }
         },
@@ -158,6 +162,7 @@ fun OrbitApp() {
                 onOpenRules = { screen = Screen.Rules },
                 onOpenAiSettings = { screen = Screen.Settings },
                 onOpenDialer = contactActions::openDialer,
+                onPullRefresh = homeViewModel::pullRefresh,
                 access = access,
                 onRequestAccess = {
                     permissionLauncher.launch(REQUIRED_PERMISSIONS.filterNot { isGranted(context, it) }.toTypedArray())
@@ -173,6 +178,7 @@ fun OrbitApp() {
                     onAddContactInstruction = homeViewModel::addContactInstruction,
                     onAddGeneralInstruction = homeViewModel::addGeneralInstruction,
                     onWhatsAppUsed = homeViewModel::onWhatsAppUsed,
+                    onTogglePin = homeViewModel::togglePin,
                 ),
             )
             // Already granted (for example by hand): nothing to ask.
@@ -199,6 +205,7 @@ fun OrbitApp() {
                     onAcceptDisclosure = settingsViewModel::acceptDisclosure,
                     onRefreshNow = settingsViewModel::refreshNow,
                     onOpenInspector = { screen = Screen.Inspector },
+                    onSetLayout = settingsViewModel::setLayoutMode,
                     onSetWhatsApp = settingsViewModel::setWhatsAppEnabled,
                     onOpenNotificationAccess = { openNotificationAccess() },
                     onDeleteWhatsApp = settingsViewModel::deleteWhatsAppData,
@@ -225,6 +232,7 @@ fun OrbitApp() {
                                 container.contactsRepository,
                                 container.suggestionsRepository,
                                 container.whatsAppEvents,
+                                container.suggestionPipeline.result.map { it.suggestions },
                             )
                         }
                     },

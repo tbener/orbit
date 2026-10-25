@@ -3,7 +3,14 @@ package com.smartdialer.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.Contact
+import com.smartdialer.data.AiSuggestionsRepository
 import com.smartdialer.data.ContactActivity
+import com.smartdialer.data.LayoutMode
+import com.smartdialer.data.UiSettings
+import com.smartdialer.llm.RefreshOutcome
+import com.smartdialer.llm.SkipReason
+import com.smartdialer.rules.ContactRef
+import kotlinx.coroutines.flow.first
 import com.smartdialer.data.ContactsRepository
 import com.smartdialer.data.DeviceContact
 import com.smartdialer.data.NumberChoice
@@ -49,6 +56,9 @@ data class HomeUiState(
     val aiOn: Boolean = true,
     /** What the open, empty search shows: frequent and recent contacts. */
     val searchSuggestions: SearchSuggestions = SearchSuggestions(),
+    val layoutMode: LayoutMode = LayoutMode.Grid3,
+    /** Contact id to the slot it is pinned to, for the pin marker. */
+    val pinnedSlots: Map<String, Int> = emptyMap(),
 )
 
 /** Up to eight contacts for the empty search, in two groups without duplicates. */
@@ -83,6 +93,8 @@ class HomeViewModel(
     private val aiSettings: AiSettings,
     private val whatsAppStore: WhatsAppEventStore,
     private val whatsAppSettings: WhatsAppSettings,
+    private val uiSettings: UiSettings,
+    private val ai: AiSuggestionsRepository,
 ) : ViewModel() {
 
     private data class Local(
@@ -95,6 +107,7 @@ class HomeViewModel(
         val ai: com.smartdialer.llm.AiSettingsState,
         val hidden: Set<String>,
         val searchSuggestions: SearchSuggestions,
+        val layoutMode: LayoutMode,
     )
 
     private val visibleCount = MutableStateFlow(PAGE_SIZE)
@@ -111,15 +124,16 @@ class HomeViewModel(
         suggestions.isRefreshing,
         visibleCount,
         local,
-        combine(aiSettings.state, rules.typedRules, suggestions.activity, contacts.contacts) { ai, typed, activity, deviceContacts ->
+        combine(aiSettings.state, rules.typedRules, suggestions.activity, contacts.contacts, uiSettings.layoutMode) { ai, typed, activity, deviceContacts, layout ->
             Extras(
                 ai,
                 typed.map { it.params }.filterIsInstance<TypedRuleParams.NeverShow>().map { it.contact.lookupKey }.toSet(),
                 SearchSuggestionsBuilder.build(activity, deviceContacts),
+                layout,
             )
         },
     ) { enforced, refreshing, count, local, extras ->
-        val (ai, hidden, searchSuggestions) = extras
+        val (ai, hidden, searchSuggestions, layoutMode) = extras
         val all = enforced.suggestions
         val visible = all.take(count)
         HomeUiState(
@@ -135,6 +149,8 @@ class HomeViewModel(
             hiddenIds = hidden,
             aiOn = ai.enabled && ai.disclosureAcknowledged,
             searchSuggestions = searchSuggestions,
+            layoutMode = layoutMode,
+            pinnedSlots = enforced.suggestions.withIndex().filter { it.value.isPinned }.associate { it.value.contact.id to it.index + 1 },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -162,9 +178,56 @@ class HomeViewModel(
         if (granted) refresh()
     }
 
-    /** Called when the app returns to the foreground; refreshes if the data may be stale. */
+    /** Called when the app returns to the foreground: reloads contacts and calls (cheap, no AI call). */
     fun onResumed() {
         if (accessGranted && System.currentTimeMillis() - lastRefreshMillis > STALE_AFTER_MILLIS) refresh()
+    }
+
+    /** Swipe down on the bubbles: ask the model again (counts against the daily cap), and say what happened. */
+    fun pullRefresh() {
+        viewModelScope.launch {
+            val text = when (val outcome = ai.refreshManual()) {
+                is RefreshOutcome.Skipped -> when (outcome.reason) {
+                    SkipReason.DAILY_CAP -> "Daily AI limit reached, showing the last result"
+                    SkipReason.AI_OFF, SkipReason.NOT_ACKNOWLEDGED -> "AI suggestions are off. Turn them on in Settings."
+                    else -> null
+                }
+                is RefreshOutcome.Failed -> "Could not update suggestions, showing the last result"
+                RefreshOutcome.Updated -> null
+            }
+            if (text != null) _messages.send(UserMessage(text))
+        }
+    }
+
+    /**
+     * Long-press on a bubble: pin the contact to the slot it is in now, or unpin it when it is already pinned.
+     * Both show a confirmation with Undo. Pins and unpins are hard rules, so the list updates at once and no
+     * LLM call is made.
+     */
+    fun togglePin(contact: Contact, slot: Int) {
+        viewModelScope.launch {
+            val typed = rules.typedRules.first()
+            val existing = typed.firstOrNull { (it.params as? TypedRuleParams.PinToSlot)?.contact?.lookupKey == contact.id }
+            if (existing != null) {
+                rules.deleteTypedRule(existing.id)
+                _messages.send(
+                    UserMessage("${contact.name} unpinned") {
+                        viewModelScope.launch { rules.addTypedRule(existing.params, createdAt = existing.createdAt) }
+                    },
+                )
+                return@launch
+            }
+            val taken = typed.firstOrNull { (it.params as? TypedRuleParams.PinToSlot)?.slot == slot }
+            if (taken != null) {
+                val owner = (taken.params as TypedRuleParams.PinToSlot).contact.displayName
+                _messages.send(UserMessage("Slot $slot is already pinned to $owner"))
+                return@launch
+            }
+            val id = rules.addTypedRule(TypedRuleParams.PinToSlot(ContactRef(contact.id, contact.name), slot))
+            _messages.send(
+                UserMessage("${contact.name} pinned to #$slot") { viewModelScope.launch { rules.deleteTypedRule(id) } },
+            )
+        }
     }
 
     private fun refresh() {
@@ -230,8 +293,8 @@ class HomeViewModel(
     }
 
     private companion object {
-        // 11 = the hero cluster (3) plus two full rows of 4 small bubbles.
-        const val PAGE_SIZE = 11
+        // 12 fills whole rows in every layout (3 and 4 per row).
+        const val PAGE_SIZE = 12
         const val SEARCH_DEBOUNCE_MS = 150L
         const val STALE_AFTER_MILLIS = 60_000L
     }

@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.smartdialer.data.LayoutMode
 import com.smartdialer.data.Suggestion
 import com.smartdialer.ui.theme.Orbit
 import kotlin.math.PI
@@ -65,6 +66,7 @@ fun OrbitField(
     onGesture: OrbitGestureHandler,
     onLoadMore: () -> Unit,
     bottomInset: Dp,
+    mode: LayoutMode,
     modifier: Modifier = Modifier,
     empty: @Composable () -> Unit,
 ) {
@@ -84,7 +86,7 @@ fun OrbitField(
 
     BoxWithConstraints(modifier.fillMaxSize()) {
         val width = maxWidth.value
-        val layout = remember(suggestions.size, width, labelScale) { OrbitLayout.compute(suggestions.size, width, labelScale) }
+        val layout = remember(suggestions.size, width, labelScale, mode) { OrbitLayout.compute(suggestions.size, width, labelScale, mode) }
         val contentHeight = layout.contentHeight.dp + bottomInset
 
         // Load the next ring when the end of the field is close to the bottom of the screen.
@@ -113,10 +115,10 @@ fun OrbitField(
                     .height(contentHeight)
                     .drawBehind {
                         if (suggestions.isEmpty()) return@drawBehind
-                        val center = Offset(size.width / 2f, OrbitLayout.HERO_CENTER_Y.dp.toPx())
+                        val center = Offset(layout.center.x.dp.toPx(), layout.center.y.dp.toPx())
                         val pulse = 0.88f + 0.12f * sin(2f * PI.toFloat() * (breathe?.value ?: 0f))
                         // A soft glow behind the top bubble.
-                        val glowRadius = 250.dp.toPx()
+                        val glowRadius = (if (mode == LayoutMode.Spotlight) 250 else 170).dp.toPx()
                         drawCircle(
                             brush = Brush.radialGradient(
                                 0f to colors.heroGlow.copy(alpha = (if (colors.isDark) 0.34f else 0.50f) * pulse),

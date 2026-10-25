@@ -1,5 +1,6 @@
 package com.smartdialer.ui.home
 
+import com.smartdialer.data.LayoutMode
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 
@@ -72,7 +73,43 @@ object OrbitLayout {
     private fun gridDiameter(row: Int, cellWidth: Float): Float =
         (FIRST_GRID_DIAMETER - GRID_STEP * row).coerceAtLeast(MIN_GRID_DIAMETER).coerceAtMost(cellWidth - GAP)
 
-    fun compute(count: Int, width: Float, labelScale: Float = 1f): OrbitLayoutResult {
+    /**
+     * Places the suggestions for the chosen [mode]. [LayoutMode.Spotlight] is the layout described above; the grid
+     * modes put equal bubbles in rows of 3 or 4 from the left. In every mode slot index + 1 is the rank.
+     */
+    fun compute(count: Int, width: Float, labelScale: Float = 1f, mode: LayoutMode = LayoutMode.Spotlight): OrbitLayoutResult =
+        when (mode) {
+            LayoutMode.Spotlight -> spotlight(count, width, labelScale)
+            LayoutMode.Grid3 -> grid(count, width, labelScale, columns = 3, maxDiameter = 112f, tier = 1)
+            LayoutMode.Grid4 -> grid(count, width, labelScale, columns = 4, maxDiameter = 88f, tier = 2)
+        }
+
+    /** Equal bubbles in rows of [columns], sized to the screen width, each with its name underneath. */
+    private fun grid(count: Int, width: Float, labelScale: Float, columns: Int, maxDiameter: Float, tier: Int): OrbitLayoutResult {
+        val margin = 12f
+        val cell = (width - 2f * margin) / columns
+        val diameter = (cell - 14f).coerceAtMost(maxDiameter).coerceAtLeast(40f)
+        val labelHeight = labelHeight(2, labelScale)
+        val top = 16f
+        val slots = (0 until count).map { index ->
+            val row = index / columns
+            val column = index % columns
+            OrbitSlot(
+                index = index,
+                ring = tier,
+                center = Offset(margin + cell * (column + 0.5f), top + diameter / 2f + row * (diameter + labelHeight + ROW_GAP)),
+                diameter = diameter,
+                labelWidth = cell - 4f,
+                labelHeight = labelHeight,
+                showSubtitle = true,
+            )
+        }
+        val center = slots.firstOrNull()?.center ?: Offset(width / 2f, top + diameter / 2f)
+        val bottom = slots.maxOfOrNull { it.footprint.bottom } ?: 0f
+        return OrbitLayoutResult(slots, center, emptyList(), if (slots.isEmpty()) 0f else bottom + BOTTOM_ROOM)
+    }
+
+    private fun spotlight(count: Int, width: Float, labelScale: Float): OrbitLayoutResult {
         val center = Offset(width / 2f, HERO_CENTER_Y)
         if (count <= 0) return OrbitLayoutResult(emptyList(), center, emptyList(), 0f)
 

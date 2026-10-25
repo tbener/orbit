@@ -210,7 +210,7 @@ fun DetailsScreen(
                     }
                     item(key = "typed-add") {
                         Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm), modifier = Modifier.fillMaxWidth()) {
-                            SolidButton("Pin to slot", Icons.Filled.PushPin, { pending = Pending.AddTyped(TypedRuleType.PIN_TO_SLOT) }, Modifier.weight(1f))
+                            SolidButton(if (state.currentSlot != null) "Pin here (#${state.currentSlot})" else "Pin to slot", Icons.Filled.PushPin, { pending = Pending.AddTyped(TypedRuleType.PIN_TO_SLOT) }, Modifier.weight(1f))
                             SolidButton("Never suggest", Icons.Filled.VisibilityOff, { actions.addTyped(TypedRuleParams.NeverShow(ref)) }, Modifier.weight(1f))
                         }
                     }
@@ -266,6 +266,7 @@ fun DetailsScreen(
             contacts = null,
             fixedContact = ref,
             initialType = action.type,
+            initialSlot = state.currentSlot,
             onDismiss = { pending = null },
             onSave = { actions.addTyped(it); pending = null },
         )

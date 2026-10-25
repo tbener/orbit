@@ -67,26 +67,28 @@ Details). The add field stacks above its send button on large fonts.
 
 ## Home
 
-The field (`OrbitLayout`, pure and unit-tested) is a structured set of rows, like `docs/design/home-mockup.png`:
+The field (`OrbitLayout`, pure) has three layouts, chosen in Settings with a small preview of each:
 
-- **Row 1:** the top-priority bubble is largest and centered, #2 on its left and #3 on its right, medium sized.
-- **Then rows of four** in an aligned grid, read left to right and top to bottom, each row slightly smaller
-  than the one above (down to a minimum). Pinned contacts keep the size of the slot they are pinned to.
-- **Every bubble has only its name under it**, centered, in one text size per tier. No subtitles, badges or
-  "last call" labels; the missed-call text appears only in the quick-actions popup.
-- **Rings:** only a very faint halo hugging the top bubble. No bubble is ever placed on a ring.
+- **Grid 3 (default):** rows of 3 equal bubbles from the left, #1 top-left, left to right and top to bottom, sized to the screen width.
+- **Grid 4:** the same with 4 per row.
+- **Spotlight:** the first row has #1 largest in the centre with #2 and #3 beside it, then rows of 4 smaller bubbles.
 
-The field scrolls and loads more rows near its end (capped list). The bubbles are held perfectly still (no ambient drift); the top glow still breathes slowly.
+In every layout each bubble has only its name under it, the list scrolls and loads more rows (capped), nothing sits on a ring
+(a faint halo only in Spotlight), and slot numbers are rank positions. Rank changes animate bubbles to their new places; the
+bubbles are otherwise still, and the glow behind #1 breathes. A pinned bubble shows a small pin marker. Long-press pins or
+unpins at the current slot; tap opens the quick actions.
 
-Controls are minimal. **Header:** the small gradient "Orbit" wordmark, the AI sparkle status, and three evenly spaced
-48dp glass buttons: add general instruction (sparkle), Rules, Settings. **Bottom bar:** a round glass search button
-next to the "Open dialer" pill (accent gradient in dark, deep navy in light), above the nav bar. **Reason card** (one
+Controls are minimal. **Header:** the small gradient "Orbit" wordmark and AI sparkle status on the left; Rules and add general instruction
+(sparkle) on the right. **Bottom bar:** a round glass Settings button on the left, the "Open dialer" pill (accent gradient in
+dark, deep navy in light) in the middle, a round glass Search button on the right, above the nav bar. Swiping down on the
+bubbles refreshes with the sparkle indicator. **Reason card** (one
 place for the reason, above the bar): "Why Gil is first" for the top contact; while a bubble's quick actions are open
 it swaps (fade and slide) to that contact's "Why Mom is #6" and reason, and returns to the top contact on close. It is
 hidden while search is open.
 
-**Search:** tapping the button grows it into a field that rises above the bar and the keyboard (spring, focus and
-keyboard at once). The bubbles dim and blur, and a scrollable glass panel above the field shows, when the field is empty,
+**Search:** tapping the button slides a field down at the top, under the status bar (spring and fade, focus and keyboard at
+once; it never sits on the keyboard) and the bottom bar fades out. The bubbles dim and blur, and a scrollable glass panel under
+the field, sized to the space above the keyboard, shows, when the field is empty,
 up to 8 contacts as "Frequent" (most calls in 90 days) and "Recent" (latest calls), then matches while typing (all
 contacts, hidden ones labelled "Hidden from suggestions"). Results open the same actions as a bottom sheet. Closed by
 back, the close icon or a tap outside; reduced motion snaps.

@@ -53,6 +53,7 @@ class AppContainer(context: Context) {
     val whatsAppEvents: Flow<List<WhatsAppEvent>> =
         combine(whatsAppSettings.state, whatsAppStore.events) { settings, events -> if (settings.enabled) events else emptyList() }
 
+    val uiSettings = com.smartdialer.data.UiSettings(context)
     val aiSettings: AiSettings = SharedPrefsAiSettings(context)
     val rankingCache: RankingCacheStore = RoomRankingCacheStore(database)
     val llmExchanges: LlmExchangeStore = RoomLlmExchangeStore(database)

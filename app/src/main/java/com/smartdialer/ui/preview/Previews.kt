@@ -77,6 +77,7 @@ private val noHomeActions = HomeActions(
     onAddContactInstruction = { _, _ -> },
     onAddGeneralInstruction = {},
     onWhatsAppUsed = {},
+    onTogglePin = { _, _ -> },
 )
 
 @Composable
@@ -90,6 +91,7 @@ private fun PreviewHome(state: HomeUiState, access: AccessState = AccessState(co
             onOpenRules = {},
             onOpenAiSettings = {},
             onOpenDialer = {},
+            onPullRefresh = {},
             access = access,
             onRequestAccess = {},
             onOpenSettings = {},

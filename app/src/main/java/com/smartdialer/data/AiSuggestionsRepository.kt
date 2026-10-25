@@ -5,6 +5,7 @@ import com.smartdialer.llm.CachedRanking
 import com.smartdialer.llm.RankingCacheStore
 import com.smartdialer.llm.RankingService
 import com.smartdialer.llm.RefreshOutcome
+import com.smartdialer.llm.RefreshTrigger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,18 +45,24 @@ class AiSuggestionsRepository(
     override val isRefreshing: StateFlow<Boolean> = service.isRefreshing
 
     /**
-     * Reads contacts and the call log (so the fallback list is current at once), then refreshes the LLM
-     * ranking in the background if it is stale or its inputs changed.
+     * Reads contacts and the call log (so the fallback list is current at once). The LLM ranking is only asked for
+     * when there is no cached ranking yet; later refreshes come from the schedule, a swipe, or a changed instruction.
      */
     override suspend fun refresh() {
         local.refresh()
-        service.refresh(force = false)
+        service.refresh(RefreshTrigger.INITIAL)
     }
 
-    /** The "Refresh now" button: always asks the model again. */
-    suspend fun refreshNow(): RefreshOutcome {
+    /** The scheduled background refresh (morning and evening). */
+    suspend fun refreshScheduled(): RefreshOutcome {
         local.refresh()
-        return service.refresh(force = true)
+        return service.refresh(RefreshTrigger.SCHEDULED)
+    }
+
+    /** Swipe down on the bubbles, or "Refresh now" in Settings. Counts against the daily cap. */
+    suspend fun refreshManual(): RefreshOutcome {
+        local.refresh()
+        return service.refresh(RefreshTrigger.MANUAL)
     }
 }
 

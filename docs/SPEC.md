@@ -76,3 +76,10 @@ Everything Orbit stores or decides must be visible and editable by the user. Tha
 ## Reason wording
 
 Reasons (the model's, in prompt `ranking-v4`, and the template reasons used without AI) give the single most relevant fact in plain, short language. No WhatsApp counts (say "You've been chatting on WhatsApp"), no statistics, and no "last spoke" timing unless it is the actual reason (a requested cadence, a same-day call to return). The Details summary shows no WhatsApp counts.
+
+## Refresh policy, layouts and pinning (current)
+
+- **Refresh policy** (replaces the 3-hour staleness rule and the 6-hour job): the ranking is refreshed (1) twice a day around 07:00 and 18:00 local time by WorkManager (flexible window, network required, re-anchored on time zone or clock changes), (2) by swiping down on the bubbles, (3) right away, with no delay, after an instruction that affects the LLM input is added, edited or deleted (including a rule that becomes soft after classification; pins and hides need no call because enforcement applies them at once), (4) once at first run with no cache. A refresh already in flight is never run in parallel: one follow-up is queued (a swipe during a run is ignored).
+- **Daily cap:** 20 ranking refreshes per local day, all triggers counted, reset at local midnight (`RefreshQuota`). At the cap a swipe says "Daily AI limit reached, showing the last result" and other triggers skip quietly. Settings shows today's count, the cap, the schedule and the last refresh. (There is no separate classification cap in the code.)
+- **Layouts** (Settings, persisted): Grid 3 (default, equal bubbles, #1 top-left), Grid 4, Spotlight. Slots are numbered by rank in every layout.
+- **Pinning:** long-press a bubble pins it to its current slot (typed PIN_TO_SLOT rule, haptic, confirmation with Undo); long-press a pinned bubble unpins it. Tap opens the quick actions. On Details, "Pin here (#N)" pre-fills the contact's current slot.

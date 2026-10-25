@@ -9,10 +9,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.sync.Mutex
+import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
-enum class SkipReason { AI_OFF, NOT_ACKNOWLEDGED, NO_CONTACTS, NO_CANDIDATES, FRESH, BACKING_OFF, BUSY }
+enum class SkipReason { AI_OFF, NOT_ACKNOWLEDGED, NO_CONTACTS, NO_CANDIDATES, DAILY_CAP, QUEUED, BUSY, HAS_CACHE, UNCHANGED }
 
 sealed interface RefreshOutcome {
     data object Updated : RefreshOutcome
@@ -40,56 +41,75 @@ class RankingService(
     private val whatsApp: WhatsAppEventStore? = null,
     private val whatsAppEnabled: () -> Boolean = { false },
 ) {
-    private val mutex = Mutex()
+    private val gate = RefreshGate()
     private val _isRefreshing = MutableStateFlow(false)
+    private var lastInstructionSignature: String? = null
 
     /** True only while the ranking call itself is running (the "updating suggestions" indicator). */
     val isRefreshing: StateFlow<Boolean> = _isRefreshing.asStateFlow()
 
-    suspend fun refresh(force: Boolean = false): RefreshOutcome {
-        val gate = settings.state.value
-        if (!gate.enabled) return RefreshOutcome.Skipped(SkipReason.AI_OFF)
-        if (!gate.disclosureAcknowledged) return RefreshOutcome.Skipped(SkipReason.NOT_ACKNOWLEDGED)
-        if (!mutex.tryLock()) return RefreshOutcome.Skipped(SkipReason.BUSY)
-        try {
-            // New instructions are classified first, so a new hard rule is a typed rule before the ranking runs.
-            classifier?.classifyPending()
+    private fun today(): LocalDate = Instant.ofEpochMilli(clock()).atZone(zone()).toLocalDate()
 
-            val deviceContacts = contacts.contacts.value ?: return RefreshOutcome.Skipped(SkipReason.NO_CONTACTS)
-            val now = clock()
-            val inputs = CandidateSelector.select(
-                contacts = deviceContacts.associate { it.contact.id to it.contact },
-                activity = if (whatsApp != null && whatsAppEnabled()) {
-                    WhatsAppSignals.merge(local.activity.value, whatsApp.all(), now)
-                } else {
-                    local.activity.value
-                },
-                freeText = rules.freeTextRules.first(),
-                typed = rules.typedRules.first(),
-                nowMillis = now,
-                zone = zone(),
-            )
-            if (inputs.candidates.isEmpty()) return RefreshOutcome.Skipped(SkipReason.NO_CANDIDATES)
-
-            val hash = RankingPrompt.inputsHash(inputs)
-            val decision = RankingFreshness.decide(
-                cached = cache.load(),
-                currentHash = hash,
-                promptVersion = Prompts.RANKING_VERSION,
-                model = LlmConfig.MODEL,
-                nowMillis = now,
-                lastFailureAtMillis = settings.state.value.lastFailureAt,
-                force = force,
-            )
-            when (decision) {
-                RankingFreshness.Decision.FRESH -> return RefreshOutcome.Skipped(SkipReason.FRESH)
-                RankingFreshness.Decision.BACKING_OFF -> return RefreshOutcome.Skipped(SkipReason.BACKING_OFF)
-                RankingFreshness.Decision.REFRESH -> Unit
-            }
-            return rank(inputs, hash)
-        } finally {
-            mutex.unlock()
+    /**
+     * Runs a ranking refresh for [trigger]. Every refresh counts against the daily cap ([RefreshQuota]). Never in
+     * parallel: while one runs, a non-manual trigger queues exactly one follow-up and a manual one is ignored.
+     */
+    suspend fun refresh(trigger: RefreshTrigger = RefreshTrigger.MANUAL): RefreshOutcome {
+        val s = settings.state.value
+        if (!s.enabled) return RefreshOutcome.Skipped(SkipReason.AI_OFF)
+        if (!s.disclosureAcknowledged) return RefreshOutcome.Skipped(SkipReason.NOT_ACKNOWLEDGED)
+        if (!RefreshQuota.canStart(s, today())) return RefreshOutcome.Skipped(SkipReason.DAILY_CAP)
+        when (gate.tryStart(trigger)) {
+            RefreshGate.Start.IGNORED -> return RefreshOutcome.Skipped(SkipReason.BUSY)
+            RefreshGate.Start.QUEUED -> return RefreshOutcome.Skipped(SkipReason.QUEUED)
+            RefreshGate.Start.STARTED -> Unit
         }
+        var outcome: RefreshOutcome
+        try {
+            outcome = runOnce(trigger)
+            // A trigger that arrived meanwhile runs now, with fresh inputs, still within the cap.
+            while (gate.nextOrFinish()) {
+                outcome = if (RefreshQuota.canStart(settings.state.value, today())) {
+                    runOnce(RefreshTrigger.INSTRUCTION)
+                } else {
+                    RefreshOutcome.Skipped(SkipReason.DAILY_CAP)
+                }
+            }
+        } catch (e: Throwable) {
+            gate.reset()
+            throw e
+        }
+        return outcome
+    }
+
+    private suspend fun runOnce(trigger: RefreshTrigger): RefreshOutcome {
+        // New instructions are classified first, so a new hard rule is a typed rule before the ranking runs.
+        classifier?.classifyPending()
+
+        val deviceContacts = contacts.contacts.value ?: return RefreshOutcome.Skipped(SkipReason.NO_CONTACTS)
+        val now = clock()
+        val inputs = CandidateSelector.select(
+            contacts = deviceContacts.associate { it.contact.id to it.contact },
+            activity = if (whatsApp != null && whatsAppEnabled()) {
+                WhatsAppSignals.merge(local.activity.value, whatsApp.all(), now)
+            } else {
+                local.activity.value
+            },
+            freeText = rules.freeTextRules.first(),
+            typed = rules.typedRules.first(),
+            nowMillis = now,
+            zone = zone(),
+        )
+        if (inputs.candidates.isEmpty()) return RefreshOutcome.Skipped(SkipReason.NO_CANDIDATES)
+
+        val signature = RankingPrompt.instructionSignature(inputs)
+        val unchanged = signature == lastInstructionSignature
+        lastInstructionSignature = signature
+        // Hard-rule changes and other edits that leave the LLM input alone need no call.
+        if (trigger == RefreshTrigger.INSTRUCTION && unchanged) return RefreshOutcome.Skipped(SkipReason.UNCHANGED)
+        if (trigger == RefreshTrigger.INITIAL && cache.load() != null) return RefreshOutcome.Skipped(SkipReason.HAS_CACHE)
+
+        return rank(inputs, RankingPrompt.inputsHash(inputs))
     }
 
     private suspend fun rank(fullInputs: RankingInputs, hash: String): RefreshOutcome {
@@ -100,6 +120,7 @@ class RankingService(
                 add("Limit reached: only the ${InstructionLimits.MAX_PER_REQUEST} most recent instructions are sent; ${inputs.unusedInstructions} older one(s) are kept but not used.")
             }
         }
+        settings.incrementRefreshCount(RefreshQuota.dayKey(today()))
         _isRefreshing.value = true
         val result = try {
             llm.complete(RankingPrompt.request(inputs))

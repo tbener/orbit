@@ -6,6 +6,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -50,7 +51,10 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -74,7 +78,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -118,8 +124,11 @@ class HomeActions(
     val onAddContactInstruction: (Contact, String) -> Unit,
     val onAddGeneralInstruction: (String) -> Unit,
     val onWhatsAppUsed: (Contact) -> Unit,
+    /** Long-press on a bubble: pin the contact at its slot, or unpin. */
+    val onTogglePin: (Contact, Int) -> Unit,
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     state: HomeUiState,
@@ -129,6 +138,7 @@ fun HomeScreen(
     onOpenRules: () -> Unit,
     onOpenAiSettings: () -> Unit,
     onOpenDialer: () -> Unit,
+    onPullRefresh: () -> Unit,
     access: AccessState,
     onRequestAccess: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -149,6 +159,7 @@ fun HomeScreen(
     var controlsHeight by remember { mutableStateOf(0.dp) }
     var cardHeight by remember { mutableStateOf(0.dp) }
     val density = LocalDensity.current
+    val haptic = LocalHapticFeedback.current
 
     fun runWith(contact: Contact, purpose: NumberPurpose, number: String) {
         when (purpose) {
@@ -181,6 +192,10 @@ fun HomeScreen(
         when (gestureMap.actionFor(gesture)) {
             BubbleAction.OpenQuickActions -> quick = QuickTarget(entry.value, entry.index + 1, slot, bounds)
             BubbleAction.Call -> useNumber(entry.value.contact, NumberPurpose.Call)
+            BubbleAction.TogglePin -> {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                actions.onTogglePin(entry.value.contact, entry.index + 1)
+            }
         }
     }
 
@@ -216,7 +231,26 @@ fun HomeScreen(
                             if (needsAccess) {
                                 PermissionPrompt(access, onRequestAccess, onOpenSettings)
                             } else {
+                                val pullState = rememberPullToRefreshState()
+                                PullToRefreshBox(
+                                    isRefreshing = state.isRefreshing,
+                                    onRefresh = onPullRefresh,
+                                    state = pullState,
+                                    indicator = {
+                                        Box(
+                                            Modifier
+                                                .align(Alignment.TopCenter)
+                                                .graphicsLayer {
+                                                    translationY = pullState.distanceFraction.coerceAtMost(1.2f) * 72.dp.toPx() - 36.dp.toPx()
+                                                    alpha = if (state.isRefreshing) 1f else pullState.distanceFraction.coerceIn(0f, 1f)
+                                                },
+                                        ) {
+                                            AiIndicator(if (state.isRefreshing) AiIndicatorState.Working else AiIndicatorState.Ready)
+                                        }
+                                    },
+                                ) {
                                 OrbitField(
+                                    mode = state.layoutMode,
                                     suggestions = state.suggestions,
                                     selectedId = state.selectedId,
                                     hiddenId = quick?.suggestion?.contact?.id,
@@ -232,16 +266,20 @@ fun HomeScreen(
                                         )
                                     },
                                 )
+                                }
                             }
                         }
                     }
+                    val barAlpha by animateFloatAsState(if (searchOpen) 0f else 1f, Orbit.motion.move(), label = "bar")
                     BottomPanel(
                         cardSpace = if (reasonTarget != null && !needsAccess) cardHeight else 0.dp,
                         onOpenDialer = onOpenDialer,
                         onOpenSearch = { searchOpen = true },
+                        onOpenSettings = onOpenAiSettings,
                         onControlsHeight = { controlsHeight = it },
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
+                            .graphicsLayer { alpha = barAlpha }
                             .onSizeChanged { panelHeight = with(density) { it.height.toDp() } },
                     )
                 }
@@ -312,7 +350,7 @@ fun HomeScreen(
     }
 }
 
-/** The "Orbit" wordmark, the AI sparkle status, and three evenly spaced glass icon buttons. */
+/** The "Orbit" wordmark and AI sparkle status on the left; Rules and "add general instruction" on the right. */
 @Composable
 private fun HomeHeader(
     indicator: AiIndicatorState?,
@@ -353,22 +391,16 @@ private fun HomeHeader(
         Spacer(Modifier.weight(1f))
         Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
             GlassIconButton(
-                icon = OrbitIcons.Sparkle,
-                description = "Add general instruction",
-                onClick = onAddInstruction,
-                tint = colors.softAccent,
-            )
-            GlassIconButton(
                 icon = Icons.Filled.Tune,
                 description = "Open rules",
                 onClick = onOpenRules,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             GlassIconButton(
-                icon = Icons.Filled.Settings,
-                description = "Open settings",
-                onClick = onOpenAiSettings,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                icon = OrbitIcons.Sparkle,
+                description = "Add general instruction",
+                onClick = onAddInstruction,
+                tint = colors.softAccent,
             )
         }
     }
@@ -380,6 +412,7 @@ private fun BottomPanel(
     cardSpace: androidx.compose.ui.unit.Dp,
     onOpenDialer: () -> Unit,
     onOpenSearch: () -> Unit,
+    onOpenSettings: () -> Unit,
     onControlsHeight: (androidx.compose.ui.unit.Dp) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -405,27 +438,27 @@ private fun BottomPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .onSizeChanged { onControlsHeight(with(density) { it.height.toDp() }) },
-                horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.md, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SearchButton(onOpenSearch)
-                DialerPill(onOpenDialer)
+                RoundGlassButton(Icons.Filled.Settings, "Open settings", onOpenSettings)
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { DialerPill(onOpenDialer) }
+                RoundGlassButton(Icons.Filled.Search, "Search contacts", onOpenSearch)
             }
         }
     }
 }
 
 @Composable
-private fun SearchButton(onClick: () -> Unit) {
+private fun RoundGlassButton(icon: androidx.compose.ui.graphics.vector.ImageVector, description: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier
             .size(Orbit.sizing.touchTarget + Orbit.spacing.sm)
             .glassCircle(strong = true, elevation = Orbit.elevation.medium)
             .clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = "Search contacts" },
+            .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(Orbit.sizing.icon))
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onBackground, modifier = Modifier.size(Orbit.sizing.icon))
     }
 }
 
@@ -527,25 +560,18 @@ private fun SearchOverlay(
                 .padding(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.md),
             verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
         ) {
-            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.BottomCenter) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .graphicsLayer { alpha = p; translationY = (1f - p) * 24.dp.toPx() }
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.large)
-                        .glass(MaterialTheme.shapes.large, strong = true)
-                        .padding(vertical = Orbit.spacing.sm),
-                ) { SearchPanelContent(query, results, suggestions, hiddenIds, access, onPick) }
-            }
-            // The field starts as the round button's width and grows to full width as it rises.
-            Box(Modifier.fillMaxWidth()) {
+            // The field slides down from the top, growing from the right (where the button is) to full width. It
+            // stays at the top, so the keyboard never covers it.
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 OrbitTextField(
                     value = query,
                     onValueChange = onQueryChange,
                     placeholder = "Search all contacts",
                     modifier = Modifier
                         .fillMaxWidth(0.2f + 0.8f * p)
-                        .graphicsLayer { alpha = p; translationY = (1f - p) * 36.dp.toPx() }
+                        .graphicsLayer { alpha = p; translationY = (p - 1f) * 48.dp.toPx() }
+                        // An opaque base, so the header behind the field never shows through.
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow, PillShape)
                         .focusRequester(focus),
                     shape = PillShape,
                     singleLine = true,
@@ -567,6 +593,17 @@ private fun SearchOverlay(
                     keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
                 )
             }
+            // The results panel fills the space under the field, down to the keyboard (or the screen bottom).
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer { alpha = p; translationY = (p - 1f) * 24.dp.toPx() }
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow, MaterialTheme.shapes.large)
+                        .glass(MaterialTheme.shapes.large, strong = true)
+                        .padding(vertical = Orbit.spacing.sm),
+                ) { SearchPanelContent(query, results, suggestions, hiddenIds, access, onPick) }
+            }
         }
     }
 }
@@ -587,7 +624,7 @@ private fun SearchPanelContent(
                 if (access.callLog) "Type a name or number to search all of your contacts. Frequent and recent contacts show up here once you have call history."
                 else "Type a name or number to search. Allow call log access to also see frequent and recent contacts here.",
             )
-        query.isBlank() -> LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(vertical = Orbit.spacing.xs)) {
+        query.isBlank() -> LazyColumn(Modifier, contentPadding = PaddingValues(vertical = Orbit.spacing.xs)) {
             if (suggestions.frequent.isNotEmpty()) {
                 item(key = "h-frequent") { GroupHeader("Frequent") }
                 items(suggestions.frequent, key = { "f-${it.id}" }) { ContactRow(it, it.id in hiddenIds, onPick) }
@@ -598,7 +635,7 @@ private fun SearchPanelContent(
             }
         }
         results.isEmpty() -> PanelHint("Nobody by that name. Search looks through all of your contacts, by name or phone number.")
-        else -> LazyColumn(Modifier.heightIn(max = 560.dp), contentPadding = PaddingValues(vertical = Orbit.spacing.xs)) {
+        else -> LazyColumn(Modifier, contentPadding = PaddingValues(vertical = Orbit.spacing.xs)) {
             items(results, key = { it.id }) { ContactRow(it, it.id in hiddenIds, onPick) }
         }
     }

@@ -2,35 +2,33 @@ package com.smartdialer.llm
 
 import com.smartdialer.rules.RulesRepository
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * Refreshes in the background shortly after the rules or instructions change (and when the AI is switched
- * on), so new instructions are classified and a new rule is reflected without waiting for the next open. The
- * refresh itself decides, by the inputs hash, whether anything needs to be asked of the model.
+ * Refreshes right away (no delay) when an instruction is added, edited or deleted, and classifies it first.
+ * The service decides whether the LLM input really changed: hard rules (pins and hides) are applied by the
+ * enforcement layer at once and need no call. If a refresh is already running, one follow-up is queued.
  */
-@OptIn(FlowPreview::class)
 class AiAutoRefresh(
     scope: CoroutineScope,
     rules: RulesRepository,
     private val settings: AiSettings,
     private val service: RankingService,
-    debounceMillis: Long = 2_500,
 ) {
     init {
+        // Turning AI on (or accepting the disclosure) with no cached ranking yet: one initial refresh.
         scope.launch {
-            combine(
-                rules.freeTextRules,
-                rules.typedRules,
-                settings.state.map { it.canCallLlm }.distinctUntilChanged(),
-            ) { _, _, _ -> Unit }
-                .debounce(debounceMillis)
-                .collect { if (settings.state.value.canCallLlm) service.refresh(force = false) }
+            settings.state.map { it.canCallLlm }.distinctUntilChanged().collect { if (it) service.refresh(RefreshTrigger.INITIAL) }
+        }
+        scope.launch {
+            rules.freeTextRules
+                .map { list -> list.map { listOf(it.id, it.text, it.status, it.contactKey) } }
+                .distinctUntilChanged()
+                .drop(1) // the rules as they were when the app started are not a change
+                .collect { if (settings.state.value.canCallLlm) service.refresh(RefreshTrigger.INSTRUCTION) }
         }
     }
 }

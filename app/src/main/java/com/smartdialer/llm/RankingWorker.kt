@@ -14,7 +14,10 @@ import androidx.work.WorkerParameters
 import com.smartdialer.OrbitApplication
 import java.util.concurrent.TimeUnit
 
-/** The periodic background refresh of the ranking. Quiet: a failure keeps the last good ranking and retries later. */
+/**
+ * The scheduled background refresh, twice a day. Quiet: a failure keeps the last good ranking and retries a
+ * little later; the daily cap applies like for every other trigger.
+ */
 class RankingWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     override suspend fun doWork(): Result {
@@ -23,21 +26,50 @@ class RankingWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         }
         if (!granted) return Result.success()
         val container = (applicationContext as OrbitApplication).container
-        return when (container.aiSuggestions.refresh()) {
+        return when (container.aiSuggestions.refreshScheduled()) {
             is RefreshOutcome.Failed -> if (runAttemptCount < 2) Result.retry() else Result.success()
             else -> Result.success()
         }
     }
+}
 
-    companion object {
-        private const val NAME = "orbit-ranking-refresh"
+/** Schedules the two daily refreshes: around 07:00 and 18:00 local time, network required. */
+object RefreshScheduler {
+    const val MORNING_HOUR = 7
+    const val EVENING_HOUR = 18
+    private const val FLEX_HOURS = 2L
 
-        /** About every [LlmConfig.PERIODIC_REFRESH_HOURS] hours, only with a network connection. */
-        fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<RankingWorker>(LlmConfig.PERIODIC_REFRESH_HOURS, TimeUnit.HOURS)
+    /** The times shown (read-only) in Settings. */
+    const val DESCRIPTION = "Around 07:00 and 18:00"
+
+    /**
+     * Each job repeats every 24 hours and may run in a 2-hour window centred on its time (the window is the last
+     * 2 hours of each period, so the first period is anchored an hour after the target). [replace] re-anchors both
+     * after a time zone or clock change.
+     */
+    fun schedule(context: Context, replace: Boolean = false, now: java.time.ZonedDateTime = java.time.ZonedDateTime.now()) {
+        WorkManager.getInstance(context).cancelUniqueWork("orbit-ranking-refresh") // the old six-hourly job
+        val policy = if (replace) ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE else ExistingPeriodicWorkPolicy.KEEP
+        for (hour in listOf(MORNING_HOUR, EVENING_HOUR)) {
+            val request = PeriodicWorkRequestBuilder<RankingWorker>(24, TimeUnit.HOURS, FLEX_HOURS, TimeUnit.HOURS)
+                .setInitialDelay(delayUntil(now, hour), TimeUnit.MILLISECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
-            WorkManager.getInstance(context).enqueueUniquePeriodicWork(NAME, ExistingPeriodicWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork("orbit-ranking-$hour", policy, request)
         }
+    }
+
+    /** Milliseconds from [now] until one hour after the next [hour]:00 local time. */
+    fun delayUntil(now: java.time.ZonedDateTime, hour: Int): Long {
+        var anchor = now.toLocalDate().atTime(hour, 0).plusHours(1).atZone(now.zone)
+        if (!anchor.isAfter(now)) anchor = anchor.plusDays(1)
+        return java.time.Duration.between(now, anchor).toMillis()
+    }
+}
+
+/** Re-anchors the schedule when the time zone or the clock changes. */
+class ScheduleChangedReceiver : android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: android.content.Intent) {
+        RefreshScheduler.schedule(context, replace = true)
     }
 }

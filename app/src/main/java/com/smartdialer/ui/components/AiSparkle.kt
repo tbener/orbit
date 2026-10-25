@@ -61,6 +61,9 @@ enum class AiIndicatorState {
 
     /** AI is paused or unavailable: a dimmed sparkle with a small slash. */
     Paused,
+
+    /** A still, bright sparkle (shown while pulling down to refresh). */
+    Ready,
 }
 
 /** The small AI sparkle next to the wordmark. Hidden entirely when nothing needs saying. */
@@ -80,14 +83,18 @@ fun AiIndicator(state: AiIndicatorState, modifier: Modifier = Modifier) {
         Icon(
             imageVector = OrbitIcons.Sparkle,
             contentDescription = null,
-            tint = if (state == AiIndicatorState.Working) accent.top else Orbit.colors.ring.copy(alpha = 1f),
+            tint = if (state != AiIndicatorState.Paused) accent.top else Orbit.colors.ring.copy(alpha = 1f),
             modifier = Modifier
                 .size(20.dp)
                 .graphicsLayer {
                     val scale = if (state == AiIndicatorState.Working) 0.85f + 0.25f * pulse else 1f
                     scaleX = scale
                     scaleY = scale
-                    alpha = if (state == AiIndicatorState.Working) 0.55f + 0.45f * pulse else 0.55f
+                    alpha = when (state) {
+                        AiIndicatorState.Working -> 0.55f + 0.45f * pulse
+                        AiIndicatorState.Ready -> 1f
+                        AiIndicatorState.Paused -> 0.55f
+                    }
                 }
                 .drawWithContent {
                     drawContent()

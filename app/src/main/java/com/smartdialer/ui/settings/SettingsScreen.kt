@@ -1,6 +1,14 @@
 package com.smartdialer.ui.settings
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.dp
+import com.smartdialer.ui.theme.glass
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
@@ -13,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Visibility
@@ -35,6 +44,9 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.selection.toggleable
+import com.smartdialer.data.LayoutMode
+import com.smartdialer.llm.RefreshScheduler
+import com.smartdialer.ui.components.InfoDialog
 import com.smartdialer.ui.rules.GlassPanel
 import com.smartdialer.ui.rules.RuleKind
 import com.smartdialer.ui.rules.ScreenHeader
@@ -48,6 +60,7 @@ class SettingsActions(
     val onAcceptDisclosure: () -> Unit,
     val onRefreshNow: () -> Unit,
     val onOpenInspector: () -> Unit,
+    val onSetLayout: (LayoutMode) -> Unit,
     val onSetWhatsApp: (Boolean) -> Unit,
     val onOpenNotificationAccess: () -> Unit,
     val onDeleteWhatsApp: () -> Unit,
@@ -101,6 +114,7 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
     var showDisclosure by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var showWhatsAppInfo by remember { mutableStateOf(false) }
+    var showLayoutInfo by remember { mutableStateOf(false) }
 
     OrbitBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -111,6 +125,22 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
                     contentPadding = PaddingValues(start = Orbit.spacing.lg, end = Orbit.spacing.lg, bottom = Orbit.spacing.xxl),
                     verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
                 ) {
+                    item {
+                        SectionHeader(
+                            kind = RuleKind.Soft,
+                            icon = Icons.Filled.GridView,
+                            title = "Bubble layout",
+                            subtitle = "How the bubbles are arranged.",
+                            onInfo = { showLayoutInfo = true },
+                        )
+                    }
+                    item {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
+                            LayoutMode.entries.forEach { mode ->
+                                LayoutChoice(mode, state.layoutMode == mode, { actions.onSetLayout(mode) }, Modifier.weight(1f))
+                            }
+                        }
+                    }
                     item {
                         SectionHeader(
                             kind = RuleKind.Soft,
@@ -176,6 +206,16 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
+                            Text(
+                                text = "Today: ${state.refreshCountToday} of ${state.refreshCap} refreshes",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Text(
+                                text = "Scheduled: ${RefreshScheduler.DESCRIPTION}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             if (state.promptVersion != null) {
                                 Text(
                                     text = "Prompt ${state.promptVersion} · ${state.model}",
@@ -283,6 +323,16 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
         }
     }
 
+    if (showLayoutInfo) {
+        InfoDialog(
+            title = "Bubble layout",
+            body = "Grid 3 (default) and Grid 4 put equal bubbles in rows from the left, #1 at the top-left. Spotlight puts #1 " +
+                "large in the middle with #2 and #3 beside it. Slots are numbered by rank in every layout, so a pin to slot 2 " +
+                "means the same thing in all of them.",
+            onDismiss = { showLayoutInfo = false },
+        )
+    }
+
     if (showWhatsAppInfo) {
         AlertDialog(
             onDismissRequest = { showWhatsAppInfo = false },
@@ -351,4 +401,41 @@ fun WhatsAppPrompt(onEnable: () -> Unit, onNotNow: () -> Unit) {
             TextButton(onClick = onNotNow, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Not now") }
         },
     )
+}
+
+/** One selectable layout: a small preview and its name. */
+@Composable
+private fun LayoutChoice(mode: LayoutMode, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val accent = Orbit.colors.accent
+    val ink = MaterialTheme.colorScheme.onSurfaceVariant
+    Column(
+        modifier = modifier
+            .glass(MaterialTheme.shapes.medium)
+            .then(if (selected) Modifier.border(2.dp, accent, MaterialTheme.shapes.medium) else Modifier)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(Orbit.spacing.sm),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(Orbit.spacing.xs),
+    ) {
+        Canvas(Modifier.fillMaxWidth().height(84.dp)) {
+            val dot = if (selected) accent else ink
+            fun circle(x: Float, y: Float, r: Float) = drawCircle(dot.copy(alpha = 0.85f), r, Offset(x * size.width, y * size.height))
+            when (mode) {
+                LayoutMode.Grid3 -> for (row in 0 until 3) for (col in 0 until 3) circle(0.2f + 0.3f * col, 0.17f + 0.33f * row, size.width * 0.12f)
+                LayoutMode.Grid4 -> for (row in 0 until 3) for (col in 0 until 4) circle(0.14f + 0.24f * col, 0.17f + 0.33f * row, size.width * 0.09f)
+                LayoutMode.Spotlight -> {
+                    circle(0.5f, 0.2f, size.width * 0.17f)
+                    circle(0.15f, 0.2f, size.width * 0.1f)
+                    circle(0.85f, 0.2f, size.width * 0.1f)
+                    for (row in 0 until 2) for (col in 0 until 4) circle(0.14f + 0.24f * col, 0.55f + 0.27f * row, size.width * 0.075f)
+                }
+            }
+        }
+        Text(
+            mode.label,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (selected) accent else MaterialTheme.colorScheme.onBackground,
+            fontWeight = if (selected) FontWeight.SemiBold else null,
+        )
+    }
 }

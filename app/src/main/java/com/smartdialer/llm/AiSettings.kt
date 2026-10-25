@@ -18,6 +18,9 @@ data class AiSettingsState(
     val lastFailureAt: Long? = null,
     /** A plain sentence about how the last refresh went. */
     val lastStatus: String? = null,
+    /** Ranking refreshes started today (local date), for the daily cap. */
+    val refreshDay: String? = null,
+    val refreshCount: Int = 0,
 ) {
     /** Nothing is ever sent unless the switch is on and the disclosure was acknowledged. */
     val canCallLlm: Boolean get() = enabled && disclosureAcknowledged
@@ -29,6 +32,9 @@ interface AiSettings {
     fun acknowledgeDisclosure()
     fun recordSuccess(at: Long)
     fun recordFailure(at: Long, message: String)
+
+    /** Counts one ranking refresh against [day] (a local date such as "2026-10-25"); a new day starts at 1. */
+    fun incrementRefreshCount(day: String)
 }
 
 class InMemoryAiSettings(initial: AiSettingsState = AiSettingsState(disclosureAcknowledged = true)) : AiSettings {
@@ -42,6 +48,10 @@ class InMemoryAiSettings(initial: AiSettingsState = AiSettingsState(disclosureAc
 
     override fun recordFailure(at: Long, message: String) =
         _state.update { it.copy(lastAttemptAt = at, lastFailureAt = at, lastStatus = message) }
+
+    override fun incrementRefreshCount(day: String) = _state.update {
+        it.copy(refreshDay = day, refreshCount = if (it.refreshDay == day) it.refreshCount + 1 else 1)
+    }
 }
 
 /** Keeps the settings in SharedPreferences. */
@@ -58,6 +68,8 @@ class SharedPrefsAiSettings(context: Context) : AiSettings {
         lastSuccessAt = prefs.getLong(LAST_SUCCESS, 0L).takeIf { it > 0 },
         lastFailureAt = prefs.getLong(LAST_FAILURE, 0L).takeIf { it > 0 },
         lastStatus = prefs.getString(LAST_STATUS, null),
+        refreshDay = prefs.getString(REFRESH_DAY, null),
+        refreshCount = prefs.getInt(REFRESH_COUNT, 0),
     )
 
     private fun edit(block: android.content.SharedPreferences.Editor.() -> Unit) {
@@ -75,7 +87,14 @@ class SharedPrefsAiSettings(context: Context) : AiSettings {
         putLong(LAST_ATTEMPT, at).putLong(LAST_FAILURE, at).putString(LAST_STATUS, message)
     }
 
+    override fun incrementRefreshCount(day: String) = edit {
+        val count = if (prefs.getString(REFRESH_DAY, null) == day) prefs.getInt(REFRESH_COUNT, 0) + 1 else 1
+        putString(REFRESH_DAY, day).putInt(REFRESH_COUNT, count)
+    }
+
     private companion object {
+        const val REFRESH_DAY = "refresh_day"
+        const val REFRESH_COUNT = "refresh_count"
         const val ENABLED = "enabled"
         const val ACKNOWLEDGED = "disclosure_acknowledged"
         const val LAST_ATTEMPT = "last_attempt"
