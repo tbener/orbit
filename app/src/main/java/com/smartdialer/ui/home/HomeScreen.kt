@@ -8,6 +8,8 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -237,18 +239,20 @@ fun HomeScreen(
                                     onRefresh = onPullRefresh,
                                     state = pullState,
                                     indicator = {
-                                        Box(
-                                            Modifier
-                                                .align(Alignment.TopCenter)
-                                                .graphicsLayer {
-                                                    translationY = pullState.distanceFraction.coerceAtMost(1.2f) * 72.dp.toPx() - 36.dp.toPx()
-                                                    alpha = if (state.isRefreshing) 1f else pullState.distanceFraction.coerceIn(0f, 1f)
-                                                },
-                                        ) {
-                                            AiIndicator(if (state.isRefreshing) AiIndicatorState.Working else AiIndicatorState.Ready)
-                                        }
+                                        PullIndicator(
+                                            fraction = pullState.distanceFraction,
+                                            refreshing = state.isRefreshing,
+                                            modifier = Modifier.align(Alignment.TopCenter),
+                                        )
                                     },
                                 ) {
+                                // Everything moves down while pulling, so the gesture and its icon are easy to see.
+                                val pull by animateFloatAsState(
+                                    if (state.isRefreshing) 1f else pullState.distanceFraction.coerceIn(0f, 1.2f),
+                                    tween(120),
+                                    label = "pull",
+                                )
+                                Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull * 84.dp.toPx() }) {
                                 OrbitField(
                                     mode = state.layoutMode,
                                     suggestions = state.suggestions,
@@ -266,6 +270,7 @@ fun HomeScreen(
                                         )
                                     },
                                 )
+                                }
                                 }
                             }
                         }
@@ -701,5 +706,49 @@ private fun DialerPill(onClick: () -> Unit) {
     ) {
         Icon(Icons.Filled.Dialpad, contentDescription = null, tint = content, modifier = Modifier.size(Orbit.sizing.iconSmall + 2.dp))
         Text("Open dialer", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = content)
+    }
+}
+
+/** The pull-to-refresh icon: a glass circle with a progress ring around the AI sparkle, and a short hint under it. */
+@Composable
+private fun PullIndicator(fraction: Float, refreshing: Boolean, modifier: Modifier = Modifier) {
+    val shown = if (refreshing) 1f else fraction.coerceIn(0f, 1f)
+    Column(
+        modifier = modifier
+            .padding(top = Orbit.spacing.sm)
+            .graphicsLayer { alpha = shown },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier.size(52.dp).glassCircle(strong = true, elevation = Orbit.elevation.medium),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (refreshing) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp),
+                    color = Orbit.colors.accent,
+                    strokeWidth = 2.5.dp,
+                )
+            } else {
+                CircularProgressIndicator(
+                    progress = { shown },
+                    modifier = Modifier.size(48.dp),
+                    color = Orbit.colors.accent,
+                    strokeWidth = 2.5.dp,
+                    trackColor = Color.Transparent,
+                )
+            }
+            AiIndicator(if (refreshing) AiIndicatorState.Working else AiIndicatorState.Ready, diameter = 36.dp)
+        }
+        Text(
+            text = when {
+                refreshing -> "Updating…"
+                fraction >= 1f -> "Release to refresh"
+                else -> "Pull to refresh"
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = Orbit.spacing.xs),
+        )
     }
 }

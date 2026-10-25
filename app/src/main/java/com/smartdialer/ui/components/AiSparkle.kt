@@ -68,7 +68,7 @@ enum class AiIndicatorState {
 
 /** The small AI sparkle next to the wordmark. Hidden entirely when nothing needs saying. */
 @Composable
-fun AiIndicator(state: AiIndicatorState, modifier: Modifier = Modifier) {
+fun AiIndicator(state: AiIndicatorState, modifier: Modifier = Modifier, diameter: Dp = 24.dp) {
     val motion = Orbit.motion
     val accent = Orbit.colors.actionAi
     val pulse = if (state == AiIndicatorState.Working && !motion.reduced) {
@@ -79,13 +79,13 @@ fun AiIndicator(state: AiIndicatorState, modifier: Modifier = Modifier) {
     } else {
         1f
     }
-    Box(modifier.size(24.dp)) {
+    Box(modifier.size(diameter)) {
         Icon(
             imageVector = OrbitIcons.Sparkle,
             contentDescription = null,
             tint = if (state != AiIndicatorState.Paused) accent.top else Orbit.colors.ring.copy(alpha = 1f),
             modifier = Modifier
-                .size(20.dp)
+                .size(diameter * 5 / 6)
                 .graphicsLayer {
                     val scale = if (state == AiIndicatorState.Working) 0.85f + 0.25f * pulse else 1f
                     scaleX = scale
