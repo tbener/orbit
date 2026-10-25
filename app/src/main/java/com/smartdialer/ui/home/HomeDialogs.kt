@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -219,4 +220,55 @@ fun ContactActionsSheet(
             }
         }
     }
+}
+
+/** The accessible alternative to dragging: pick the slot to move [name] to. Slots held by a pin cannot be chosen. */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+fun SlotPickerDialog(
+    name: String,
+    current: Int,
+    count: Int,
+    pinnedSlots: Set<Int>,
+    onPick: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        shape = MaterialTheme.shapes.extraLarge,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = { Text("Move $name to position", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Orbit.spacing.sm),
+            ) {
+                (1..count).forEach { slot ->
+                    val enabled = slot != current && slot !in pinnedSlots
+                    val label = when {
+                        slot == current -> "$slot (now)"
+                        slot in pinnedSlots -> "$slot (pinned)"
+                        else -> "$slot"
+                    }
+                    Box(
+                        Modifier
+                            .heightIn(min = Orbit.sizing.touchTarget)
+                            .clip(CircleShape)
+                            .background(if (enabled) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent)
+                            .then(if (enabled) Modifier.clickable(role = Role.Button, onClickLabel = "Move to position $slot") { onPick(slot) } else Modifier)
+                            .padding(horizontal = Orbit.spacing.lg),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            label,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (enabled) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss, modifier = Modifier.heightIn(min = Orbit.sizing.touchTarget)) { Text("Cancel") } },
+    )
 }

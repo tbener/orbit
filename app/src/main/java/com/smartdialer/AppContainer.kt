@@ -54,6 +54,7 @@ class AppContainer(context: Context) {
         combine(whatsAppSettings.state, whatsAppStore.events) { settings, events -> if (settings.enabled) events else emptyList() }
 
     val uiSettings = com.smartdialer.data.UiSettings(context)
+    val manualArrangement: com.smartdialer.data.ManualArrangement = com.smartdialer.data.PrefsManualArrangement(context)
     val aiSettings: AiSettings = SharedPrefsAiSettings(context)
     val rankingCache: RankingCacheStore = RoomRankingCacheStore(database)
     val llmExchanges: LlmExchangeStore = RoomLlmExchangeStore(database)
@@ -71,12 +72,13 @@ class AppContainer(context: Context) {
         classifier = classifier,
         whatsApp = whatsAppStore,
         whatsAppEnabled = { whatsAppSettings.state.value.enabled },
+        onRankingUpdated = { manualArrangement.clear() },
     )
 
     /** The ranking source for the home screen: cached LLM ranking when on, the fallback ranker otherwise. */
     val aiSuggestions = AiSuggestionsRepository(deviceSuggestions, rankingCache, aiSettings, contactsRepository, rankingService, scope)
     val suggestionsRepository: SuggestionsRepository = aiSuggestions
-    val suggestionPipeline = SuggestionPipeline(suggestionsRepository, rulesRepository, contactsRepository, scope)
+    val suggestionPipeline = SuggestionPipeline(suggestionsRepository, rulesRepository, contactsRepository, scope, manualArrangement)
 
     init {
         AiAutoRefresh(scope, rulesRepository, aiSettings, rankingService)

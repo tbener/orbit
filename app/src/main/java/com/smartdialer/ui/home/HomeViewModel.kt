@@ -6,6 +6,8 @@ import com.smartdialer.data.Contact
 import com.smartdialer.data.AiSuggestionsRepository
 import com.smartdialer.data.ContactActivity
 import com.smartdialer.data.LayoutMode
+import com.smartdialer.data.ManualArrangement
+import com.smartdialer.ranking.Reorder
 import com.smartdialer.data.UiSettings
 import com.smartdialer.llm.RefreshOutcome
 import com.smartdialer.llm.SkipReason
@@ -59,6 +61,16 @@ data class HomeUiState(
     val layoutMode: LayoutMode = LayoutMode.Grid3,
     /** Contact id to the slot it is pinned to, for the pin marker. */
     val pinnedSlots: Map<String, Int> = emptyMap(),
+    /** The small glass confirmation (pin, unpin, move) with its actions, shown for about six seconds. */
+    val toast: Toast? = null,
+)
+
+/** A glass toast: [text], an optional primary action (such as "Pin") and an optional Undo. */
+class Toast(
+    val text: String,
+    val primaryLabel: String? = null,
+    val onPrimary: () -> Unit = {},
+    val undo: (() -> Unit)? = null,
 )
 
 /** Up to eight contacts for the empty search, in two groups without duplicates. */
@@ -95,12 +107,15 @@ class HomeViewModel(
     private val whatsAppSettings: WhatsAppSettings,
     private val uiSettings: UiSettings,
     private val ai: AiSuggestionsRepository,
+    private val manualArrangement: ManualArrangement,
 ) : ViewModel() {
 
     private data class Local(
         val selectedId: String? = null,
         val query: String = "",
         val searchResults: List<Contact> = emptyList(),
+        val dragging: Boolean = false,
+        val toast: Toast? = null,
     )
 
     private data class Extras(
@@ -109,6 +124,12 @@ class HomeViewModel(
         val searchSuggestions: SearchSuggestions,
         val layoutMode: LayoutMode,
     )
+
+    private var frozenAll: List<Suggestion>? = null
+    private var latestAll: List<Suggestion> = emptyList()
+    private var latestVisible: List<Suggestion> = emptyList()
+    private var latestPinned: Map<String, Int> = emptyMap()
+    private var toastJob: Job? = null
 
     private val visibleCount = MutableStateFlow(PAGE_SIZE)
     private val local = MutableStateFlow(Local())
@@ -134,8 +155,11 @@ class HomeViewModel(
         },
     ) { enforced, refreshing, count, local, extras ->
         val (ai, hidden, searchSuggestions, layoutMode) = extras
-        val all = enforced.suggestions
+        // While a bubble is being dragged, new results wait: the list is frozen and updated right after the drop.
+        val all = if (local.dragging) (frozenAll ?: enforced.suggestions.also { frozenAll = it }) else enforced.suggestions.also { frozenAll = null }
         val visible = all.take(count)
+        latestAll = all
+        latestVisible = visible
         HomeUiState(
             suggestions = visible,
             selectedId = local.selectedId?.takeIf { id -> visible.any { it.contact.id == id } }
@@ -150,7 +174,9 @@ class HomeViewModel(
             aiOn = ai.enabled && ai.disclosureAcknowledged,
             searchSuggestions = searchSuggestions,
             layoutMode = layoutMode,
-            pinnedSlots = enforced.suggestions.withIndex().filter { it.value.isPinned }.associate { it.value.contact.id to it.index + 1 },
+            pinnedSlots = all.withIndex().filter { it.value.isPinned }.associate { it.value.contact.id to it.index + 1 }
+                .also { latestPinned = it },
+            toast = local.toast,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
@@ -210,23 +236,92 @@ class HomeViewModel(
             val existing = typed.firstOrNull { (it.params as? TypedRuleParams.PinToSlot)?.contact?.lookupKey == contact.id }
             if (existing != null) {
                 rules.deleteTypedRule(existing.id)
-                _messages.send(
-                    UserMessage("${contact.name} unpinned") {
+                showToast(
+                    Toast("${contact.name} unpinned", undo = {
                         viewModelScope.launch { rules.addTypedRule(existing.params, createdAt = existing.createdAt) }
-                    },
+                    }),
                 )
                 return@launch
             }
             val taken = typed.firstOrNull { (it.params as? TypedRuleParams.PinToSlot)?.slot == slot }
             if (taken != null) {
                 val owner = (taken.params as TypedRuleParams.PinToSlot).contact.displayName
-                _messages.send(UserMessage("Slot $slot is already pinned to $owner"))
+                showToast(Toast("Slot $slot is already pinned to $owner"))
                 return@launch
             }
             val id = rules.addTypedRule(TypedRuleParams.PinToSlot(ContactRef(contact.id, contact.name), slot))
-            _messages.send(
-                UserMessage("${contact.name} pinned to #$slot") { viewModelScope.launch { rules.deleteTypedRule(id) } },
-            )
+            showToast(Toast("${contact.name} pinned to #$slot", undo = { viewModelScope.launch { rules.deleteTypedRule(id) } }))
+        }
+    }
+
+    /** True while a bubble is being dragged (and results are held back). */
+    fun setDragging(active: Boolean) {
+        local.update { it.copy(dragging = active) }
+    }
+
+    fun showToast(toast: Toast) {
+        toastJob?.cancel()
+        local.update { it.copy(toast = toast) }
+        toastJob = viewModelScope.launch {
+            delay(TOAST_MILLIS)
+            local.update { it.copy(toast = null) }
+        }
+    }
+
+    fun dismissToast() {
+        toastJob?.cancel()
+        local.update { it.copy(toast = null) }
+    }
+
+    /**
+     * A bubble was dropped on another slot (also used by the "Move to position" accessibility action). Slots are
+     * 1-based rank positions in the displayed list. An unpinned bubble re-orders the list as a temporary manual
+     * arrangement and offers to pin it there; a pinned bubble moves its pin. Moves are not sent to the LLM.
+     */
+    fun moveBubble(from: Int, to: Int) {
+        val visibleIds = latestVisible.map { it.contact.id }
+        when (val result = Reorder.move(visibleIds, latestPinned, from, to)) {
+            Reorder.Result.NoOp, Reorder.Result.Blocked -> Unit
+            is Reorder.Result.Moved -> {
+                val name = latestVisible[from - 1].contact.name
+                val previous = manualArrangement.order.value
+                // The visible slots are rearranged; contacts further down keep their place after them.
+                manualArrangement.set(result.order + latestAll.drop(visibleIds.size).map { it.contact.id })
+                showToast(
+                    Toast(
+                        text = "Pin $name to slot $to?",
+                        primaryLabel = "Pin",
+                        onPrimary = { pinAt(latestVisible.getOrNull(to - 1)?.contact ?: return@Toast, to) },
+                        undo = { manualArrangement.set(previous) },
+                    ),
+                )
+            }
+            is Reorder.Result.PinMoved -> viewModelScope.launch {
+                val rule = rules.typedRules.first().firstOrNull {
+                    (it.params as? TypedRuleParams.PinToSlot)?.contact?.lookupKey == result.contactKey
+                } ?: return@launch
+                val old = rule.params as TypedRuleParams.PinToSlot
+                rules.updateTypedRule(rule.id, old.copy(slot = result.newSlot))
+                showToast(
+                    Toast(
+                        "${old.contact.displayName} pinned to #${result.newSlot}",
+                        undo = { viewModelScope.launch { rules.updateTypedRule(rule.id, old) } },
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun pinAt(contact: Contact, slot: Int) {
+        viewModelScope.launch {
+            val typed = rules.typedRules.first()
+            val taken = typed.any { (it.params as? TypedRuleParams.PinToSlot)?.slot == slot }
+            if (taken) {
+                showToast(Toast("Slot $slot is already pinned"))
+                return@launch
+            }
+            val id = rules.addTypedRule(TypedRuleParams.PinToSlot(ContactRef(contact.id, contact.name), slot))
+            showToast(Toast("${contact.name} pinned to #$slot", undo = { viewModelScope.launch { rules.deleteTypedRule(id) } }))
         }
     }
 
@@ -296,6 +391,7 @@ class HomeViewModel(
         // 12 fills whole rows in every layout (3 and 4 per row).
         const val PAGE_SIZE = 12
         const val SEARCH_DEBOUNCE_MS = 150L
+        const val TOAST_MILLIS = 6_000L
         const val STALE_AFTER_MILLIS = 60_000L
     }
 }

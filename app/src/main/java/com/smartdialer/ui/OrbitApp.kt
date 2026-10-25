@@ -77,6 +77,7 @@ fun OrbitApp() {
                     whatsAppSettings = container.whatsAppSettings,
                     uiSettings = container.uiSettings,
                     ai = container.aiSuggestions,
+                    manualArrangement = container.manualArrangement,
                 )
             }
         },
@@ -163,6 +164,9 @@ fun OrbitApp() {
                 onOpenAiSettings = { screen = Screen.Settings },
                 onOpenDialer = contactActions::openDialer,
                 onPullRefresh = homeViewModel::pullRefresh,
+                onDragActive = homeViewModel::setDragging,
+                onMoveBubble = homeViewModel::moveBubble,
+                onDismissToast = homeViewModel::dismissToast,
                 access = access,
                 onRequestAccess = {
                     permissionLauncher.launch(REQUIRED_PERMISSIONS.filterNot { isGranted(context, it) }.toTypedArray())

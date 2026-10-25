@@ -40,6 +40,8 @@ class RankingService(
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
     private val whatsApp: WhatsAppEventStore? = null,
     private val whatsAppEnabled: () -> Boolean = { false },
+    /** Called after a ranking was stored (the temporary manual arrangement is cleared then). */
+    private val onRankingUpdated: () -> Unit = {},
 ) {
     private val gate = RefreshGate()
     private val _isRefreshing = MutableStateFlow(false)
@@ -152,6 +154,7 @@ class RankingService(
             generatedAt = now,
         )
         cache.save(CachedRanking(entries, hash, Prompts.RANKING_VERSION, LlmConfig.MODEL, now))
+        onRankingUpdated()
         exchanges.save(LlmExchange(RankingPrompt.PURPOSE, now, "Ranked ${parse.entries.size} of ${keys.size} contacts", result.requestBody, result.responseBody, limitNotes + parse.issues))
         settings.recordSuccess(now)
         return RefreshOutcome.Updated

@@ -1,6 +1,7 @@
 package com.smartdialer.data
 
 import com.smartdialer.ranking.EnforcementResult
+import com.smartdialer.ranking.ManualOrder
 import com.smartdialer.ranking.RuleEnforcer
 import com.smartdialer.rules.RulesRepository
 import kotlinx.coroutines.CoroutineScope
@@ -18,12 +19,16 @@ class SuggestionPipeline(
     rules: RulesRepository,
     contacts: ContactsRepository,
     scope: CoroutineScope,
+    manual: ManualArrangement = InMemoryManualArrangement(),
 ) {
     val result: StateFlow<EnforcementResult> = combine(
         suggestions.suggestions,
         rules.typedRules,
         contacts.contacts,
-    ) { ranked, typedRules, deviceContacts ->
+        manual.order,
+    ) { rankedList, typedRules, deviceContacts, manualOrder ->
+        // A temporary manual arrangement comes first; the hard rules still have the final word.
+        val ranked = ManualOrder.apply(rankedList, manualOrder)
         if (deviceContacts == null) {
             // Contacts are unavailable, so rules cannot be resolved; show the plain ranking.
             EnforcementResult(ranked.take(MAX_SUGGESTIONS), emptyList())

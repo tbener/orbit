@@ -39,6 +39,31 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.zIndex
+import com.smartdialer.ranking.Reorder
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import com.smartdialer.data.LayoutMode
 import com.smartdialer.data.Suggestion
 import com.smartdialer.ui.theme.Orbit
@@ -67,6 +92,16 @@ fun OrbitField(
     onLoadMore: () -> Unit,
     bottomInset: Dp,
     mode: LayoutMode,
+    /** Drag is off while the search or a quick-actions arc is open. */
+    dragEnabled: Boolean,
+    /** Contact id to the slot it is pinned to. */
+    pinnedSlots: Map<String, Int>,
+    /** A drag started or ended (new results are held back meanwhile). */
+    onDragActive: (Boolean) -> Unit,
+    /** A bubble was dropped: from and to are 1-based slots. */
+    onDrop: (from: Int, to: Int) -> Unit,
+    /** TalkBack's "Move to position...": the bubble and its slot. */
+    onMoveRequest: (Suggestion, Int) -> Unit,
     modifier: Modifier = Modifier,
     empty: @Composable () -> Unit,
 ) {
@@ -88,6 +123,101 @@ fun OrbitField(
         val width = maxWidth.value
         val layout = remember(suggestions.size, width, labelScale, mode) { OrbitLayout.compute(suggestions.size, width, labelScale, mode) }
         val contentHeight = layout.contentHeight.dp + bottomInset
+
+        // ---- Drag to reorder. Slots are rank positions; the other bubbles slide aside using the normal slot animation.
+        val scope = rememberCoroutineScope()
+        val haptic = LocalHapticFeedback.current
+        val density = LocalDensity.current
+        val ids = suggestions.map { it.contact.id }
+        var dragId by remember { mutableStateOf<String?>(null) }
+        var dragFrom by remember { mutableIntStateOf(-1) }
+        var dragDelta by remember { mutableStateOf(Offset.Zero) }
+        var scrollStart by remember { mutableIntStateOf(0) }
+        var target by remember { mutableIntStateOf(-1) }
+        val pinnedSlotSet = pinnedSlots.values.toSet()
+        fun blocked(index: Int) = index >= 0 && index != dragFrom && (index + 1) in pinnedSlotSet
+
+        val preview: List<String> = if (dragId != null && target >= 0 && target != dragFrom && !blocked(target)) {
+            when (val r = Reorder.move(ids, pinnedSlots, dragFrom + 1, target + 1)) {
+                is Reorder.Result.Moved -> r.order
+                is Reorder.Result.PinMoved -> r.order
+                else -> ids
+            }
+        } else {
+            ids
+        }
+        val byId = suggestions.associateBy { it.contact.id }
+        val ordered = preview.mapNotNull(byId::get)
+
+        /** The dragged bubble's center in the field, in dp, including how far the field scrolled since the drag began. */
+        fun dragCenter(): Offset {
+            val origin = layout.slots[dragFrom].center
+            val d = density.density
+            return Offset(origin.x + dragDelta.x / d, origin.y + dragDelta.y / d + (scroll.value - scrollStart) / d)
+        }
+
+        fun updateTarget() {
+            if (dragId == null || dragFrom !in layout.slots.indices) return
+            val c = dragCenter()
+            val nearest = layout.slots.minBy { (it.center - c).getDistance() }.index
+            if (nearest != target) {
+                target = nearest
+                if (blocked(nearest)) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+            }
+        }
+
+        fun startDrag(index: Int) {
+            dragId = ids[index]
+            dragFrom = index
+            dragDelta = Offset.Zero
+            scrollStart = scroll.value
+            target = index
+            onDragActive(true)
+        }
+
+        fun finishDrag(moved: Boolean) {
+            val id = dragId ?: return
+            val from = dragFrom
+            val to = target
+            scope.launch {
+                val startDelta = dragDelta
+                val settle: Offset? = when {
+                    !moved || to < 0 || to == from -> null
+                    blocked(to) -> Offset.Zero // back to where it came from
+                    else -> {
+                        val d = density.density
+                        val c = layout.slots[to].center
+                        val o = layout.slots[from].center
+                        Offset((c.x - o.x) * d, (c.y - o.y) * d - (scroll.value - scrollStart))
+                    }
+                }
+                if (settle != null && !motion.reduced) {
+                    animate(0f, 1f, animationSpec = tween(160)) { v, _ -> dragDelta = startDelta + (settle - startDelta) * v }
+                }
+                if (moved && to >= 0 && to != from && !blocked(to)) onDrop(from + 1, to + 1)
+                dragId = null
+                target = -1
+                dragDelta = Offset.Zero
+                onDragActive(false)
+                @Suppress("UNUSED_EXPRESSION") id
+            }
+        }
+
+        // Near the top or bottom edge the field scrolls while dragging.
+        LaunchedEffect(dragId) {
+            while (dragId != null) {
+                val d = density.density
+                val y = layout.slots[dragFrom].center.y * d - scrollStart + dragDelta.y
+                val edge = with(density) { 96.dp.toPx() }
+                val bottomLimit = constraints.maxHeight - with(density) { bottomInset.toPx() } - edge / 2f
+                when {
+                    y < edge -> scroll.scrollBy(-20f)
+                    y > bottomLimit -> scroll.scrollBy(20f)
+                }
+                updateTarget()
+                delay(16)
+            }
+        }
 
         // Load the next ring when the end of the field is close to the bottom of the screen.
         val viewportPx = constraints.maxHeight
@@ -144,19 +274,66 @@ fun OrbitField(
                 if (suggestions.isEmpty()) {
                     Box(Modifier.fillMaxWidth().offset(y = 64.dp), contentAlignment = Alignment.TopCenter) { empty() }
                 }
-                layout.slots.forEach { slot ->
-                    val suggestion = suggestions[slot.index]
+                // Where the dragged bubble would land: a ring with the slot number, or a "not allowed" cue on a pinned slot.
+                if (dragId != null && target >= 0 && target != dragFrom && target in layout.slots.indices) {
+                    val s = layout.slots[target]
+                    if (blocked(target)) {
+                        Box(
+                            Modifier
+                                .offset((s.center.x - 16f).dp, (s.center.y - 16f).dp)
+                                .size(32.dp)
+                                .background(colors.alert, CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(Icons.Filled.Block, contentDescription = null, tint = colors.onAlert, modifier = Modifier.size(20.dp))
+                        }
+                    } else {
+                        Box(
+                            Modifier
+                                .offset((s.center.x - s.diameter / 2f).dp, (s.center.y - s.diameter / 2f).dp)
+                                .size(s.diameter.dp)
+                                .background(colors.accent.copy(alpha = 0.12f), CircleShape)
+                                .border(2.dp, colors.accent.copy(alpha = 0.8f), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("${target + 1}", style = MaterialTheme.typography.titleMedium, color = colors.accent)
+                        }
+                    }
+                }
+                ordered.forEachIndexed { index, suggestion ->
+                    val slot = layout.slots[index]
                     key(suggestion.contact.id) {
+                        val id = suggestion.contact.id
+                        val original = ids.indexOf(id)
+                        val originalSlot = layout.slots[original]
+                        val isDragged = id == dragId
                         val labelWidth = maxOf(slot.diameter, slot.labelWidth)
                         val left by animateDpAsState((slot.center.x - labelWidth / 2f).dp, motion.move(380), label = "slotX")
                         val top by animateDpAsState((slot.center.y - slot.diameter / 2f).dp, motion.move(380), label = "slotY")
-                        val firstTime = remember { seen.add(suggestion.contact.id) }
+                        val firstTime = remember { seen.add(id) }
+                        val lift by animateFloatAsState(if (isDragged) 1f else 0f, if (motion.reduced) snap() else tween(140), label = "lift")
                         Box(
                             Modifier
-                                .offset(left, top)
+                                .then(
+                                    if (isDragged) {
+                                        // Follows the finger, at the size of the slot it would land in.
+                                        Modifier.offset {
+                                            val c = dragCenter()
+                                            IntOffset(((c.x - labelWidth / 2f) * density.density).roundToInt(), ((c.y - slot.diameter / 2f) * density.density).roundToInt())
+                                        }
+                                    } else {
+                                        Modifier.offset(left, top)
+                                    },
+                                )
+                                .zIndex(if (isDragged) 10f else 0f)
+                                .graphicsLayer {
+                                    val scale = 1f + 0.12f * lift
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
                                 .width(labelWidth.dp)
                                 .bubbleEntrance(play = firstTime, index = slot.index)
-                                .alpha(if (suggestion.contact.id == hiddenId) 0f else 1f),
+                                .alpha(if (id == hiddenId) 0f else 1f),
                         ) {
                             ContactBubble(
                                 suggestion = suggestion,
@@ -165,8 +342,18 @@ fun OrbitField(
                                 diameter = slot.diameter.dp,
                                 labelWidth = labelWidth.dp,
                                 showSubtitle = slot.showSubtitle,
-                                selected = suggestion.contact.id == selectedId,
-                                onGesture = { gesture, bounds -> onGesture(IndexedValue(slot.index, suggestion), slot, gesture, bounds) },
+                                selected = id == selectedId && dragId == null,
+                                lift = lift,
+                                onGesture = { gesture, bounds ->
+                                    onGesture(IndexedValue(original, suggestion), originalSlot, gesture, bounds)
+                                },
+                                drag = BubbleDragCallbacks(
+                                    enabled = { dragEnabled },
+                                    onStart = { startDrag(original) },
+                                    onMove = { delta -> dragDelta += delta; updateTarget() },
+                                    onEnd = ::finishDrag,
+                                ),
+                                onMoveRequest = { onMoveRequest(suggestion, original + 1) },
                                 modifier = Modifier.width(labelWidth.dp),
                             )
                         }

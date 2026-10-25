@@ -13,18 +13,30 @@ enum class BubbleAction {
 
     /** Call the contact right away. */
     Call,
+
+    /** Lift the bubble and move it to another slot (hold, then drag). */
+    Reorder,
 }
 
 /**
  * The single place that says which gesture does what. To make this configurable later, build a
  * [GestureMap] from a setting and pass it to the home screen.
  */
-data class GestureMap(val tap: BubbleAction, val longPress: BubbleAction) {
+data class GestureMap(
+    val tap: BubbleAction,
+    /** Press and hold, then release without moving. */
+    val longPress: BubbleAction,
+    /** Press and hold, then move the finger. */
+    val holdAndDrag: BubbleAction = BubbleAction.Reorder,
+) {
     fun actionFor(gesture: BubbleGesture): BubbleAction = when (gesture) {
         BubbleGesture.Tap -> tap
         BubbleGesture.LongPress -> longPress
     }
 }
 
-/** Tap opens the quick actions; long-press pins (or unpins) the contact at its current slot. */
+/**
+ * Tap opens the quick actions. Press and hold lifts the bubble with a light haptic: if the finger then moves it
+ * is a drag to another slot; if it is released without moving, the contact is pinned (or unpinned) at its slot.
+ */
 val DefaultGestureMap = GestureMap(tap = BubbleAction.OpenQuickActions, longPress = BubbleAction.TogglePin)

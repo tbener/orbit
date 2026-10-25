@@ -75,8 +75,11 @@ The field (`OrbitLayout`, pure) has three layouts, chosen in Settings with a sma
 
 In every layout each bubble has only its name under it, the list scrolls and loads more rows (capped), nothing sits on a ring
 (a faint halo only in Spotlight), and slot numbers are rank positions. Rank changes animate bubbles to their new places; the
-bubbles are otherwise still, and the glow behind #1 breathes. A pinned bubble shows a small pin marker. Long-press pins or
-unpins at the current slot; tap opens the quick actions.
+bubbles are otherwise still, and the glow behind #1 breathes. A pinned bubble shows a small pin marker. Tap opens the quick actions; press and hold lifts a bubble (scale and a brighter glow): drag
+it and the others slide aside with the rank-change animation, a ring with the slot number shows where it will land (in Spotlight it
+takes the size of that slot), and the field scrolls near the top and bottom edges. A pinned slot is not a valid target: no ring,
+a small not-allowed cue and a soft haptic, and a drop there glides back. Releasing a hold without moving pins or unpins at the slot.
+Confirmations (pin, unpin, move) use one small glass toast with Undo. Reduced motion snaps everything.
 
 Controls are minimal. **Header:** the small gradient "Orbit" wordmark and AI sparkle status on the left; Rules and add general instruction
 (sparkle) on the right. **Bottom bar:** a round glass Settings button on the left, the "Open dialer" pill (accent gradient in

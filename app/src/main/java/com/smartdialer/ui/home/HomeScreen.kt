@@ -141,6 +141,9 @@ fun HomeScreen(
     onOpenAiSettings: () -> Unit,
     onOpenDialer: () -> Unit,
     onPullRefresh: () -> Unit,
+    onDragActive: (Boolean) -> Unit,
+    onMoveBubble: (from: Int, to: Int) -> Unit,
+    onDismissToast: () -> Unit,
     access: AccessState,
     onRequestAccess: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -156,6 +159,7 @@ fun HomeScreen(
     var numberPick by remember { mutableStateOf<NumberPick?>(null) }
     var showGeneralSheet by remember { mutableStateOf(false) }
     var searchPick by remember { mutableStateOf<Contact?>(null) }
+    var movePick by remember { mutableStateOf<Pair<Suggestion, Int>?>(null) }
     var searchOpen by rememberSaveable { mutableStateOf(false) }
     var panelHeight by remember { mutableStateOf(0.dp) }
     var controlsHeight by remember { mutableStateOf(0.dp) }
@@ -194,6 +198,7 @@ fun HomeScreen(
         when (gestureMap.actionFor(gesture)) {
             BubbleAction.OpenQuickActions -> quick = QuickTarget(entry.value, entry.index + 1, slot, bounds)
             BubbleAction.Call -> useNumber(entry.value.contact, NumberPurpose.Call)
+            BubbleAction.Reorder -> Unit // handled by the field's drag
             BubbleAction.TogglePin -> {
                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                 actions.onTogglePin(entry.value.contact, entry.index + 1)
@@ -255,6 +260,11 @@ fun HomeScreen(
                                 Box(Modifier.fillMaxSize().graphicsLayer { translationY = pull * 84.dp.toPx() }) {
                                 OrbitField(
                                     mode = state.layoutMode,
+                                    dragEnabled = !searchOpen && quick == null,
+                                    pinnedSlots = state.pinnedSlots,
+                                    onDragActive = onDragActive,
+                                    onDrop = onMoveBubble,
+                                    onMoveRequest = { suggestion, slot -> movePick = suggestion to slot },
                                     suggestions = state.suggestions,
                                     selectedId = state.selectedId,
                                     hiddenId = quick?.suggestion?.contact?.id,
@@ -316,6 +326,20 @@ fun HomeScreen(
                 )
             }
 
+            // The small glass confirmation for pin, unpin and move, with Undo; it goes by itself after about six seconds.
+            var shownToast by remember { mutableStateOf<Toast?>(null) }
+            if (state.toast != null) shownToast = state.toast
+            AnimatedVisibility(
+                visible = state.toast != null && !searchOpen,
+                enter = fadeIn(Orbit.motion.enter()) + slideInVertically(Orbit.motion.enter()) { it / 2 },
+                exit = fadeOut(Orbit.motion.exit()) + slideOutVertically(Orbit.motion.exit()) { it / 2 },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = Orbit.spacing.lg, end = Orbit.spacing.lg, bottom = navBottom + controlsHeight + Orbit.spacing.lg + Orbit.spacing.sm),
+            ) {
+                shownToast?.let { GlassToast(it, onDismissToast) }
+            }
+
             SearchOverlay(
                 open = searchOpen,
                 query = state.query,
@@ -335,6 +359,17 @@ fun HomeScreen(
             pick = pick,
             onPick = { number -> runWith(pick.contact, pick.purpose, number); numberPick = null },
             onDismiss = { numberPick = null },
+        )
+    }
+
+    movePick?.let { (suggestion, slot) ->
+        SlotPickerDialog(
+            name = suggestion.contact.name,
+            current = slot,
+            count = state.suggestions.size,
+            pinnedSlots = state.pinnedSlots.values.toSet(),
+            onPick = { to -> onMoveBubble(slot, to); movePick = null },
+            onDismiss = { movePick = null },
         )
     }
 
@@ -751,4 +786,43 @@ private fun PullIndicator(fraction: Float, refreshing: Boolean, modifier: Modifi
             modifier = Modifier.padding(top = Orbit.spacing.xs),
         )
     }
+}
+
+/** A small glass confirmation with up to two actions (for example "Pin" and "Undo"). */
+@Composable
+private fun GlassToast(toast: Toast, onDismiss: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.large)
+            .glass(MaterialTheme.shapes.large, strong = true, elevation = Orbit.elevation.medium)
+            .padding(start = Orbit.spacing.lg, end = Orbit.spacing.sm)
+            .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            toast.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f).padding(vertical = Orbit.spacing.md),
+        )
+        if (toast.primaryLabel != null) {
+            ToastAction(toast.primaryLabel, Orbit.colors.accent) { toast.onPrimary(); onDismiss() }
+        }
+        if (toast.undo != null) {
+            ToastAction("Undo", MaterialTheme.colorScheme.onSurfaceVariant) { toast.undo.invoke(); onDismiss() }
+        }
+    }
+}
+
+@Composable
+private fun ToastAction(label: String, color: Color, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .heightIn(min = Orbit.sizing.touchTarget)
+            .clip(PillShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = Orbit.spacing.md),
+        contentAlignment = Alignment.Center,
+    ) { Text(label, style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.SemiBold) }
 }
