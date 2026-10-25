@@ -80,15 +80,15 @@ object OrbitLayout {
     fun compute(count: Int, width: Float, labelScale: Float = 1f, mode: LayoutMode = LayoutMode.Spotlight): OrbitLayoutResult =
         when (mode) {
             LayoutMode.Spotlight -> spotlight(count, width, labelScale)
-            LayoutMode.Grid3 -> grid(count, width, labelScale, columns = 3, maxDiameter = 112f, tier = 1)
-            LayoutMode.Grid4 -> grid(count, width, labelScale, columns = 4, maxDiameter = 88f, tier = 2)
+            LayoutMode.Grid3 -> grid(count, width, labelScale, columns = 3, maxDiameter = 92f, tier = 1, gap = 34f)
+            LayoutMode.Grid4 -> grid(count, width, labelScale, columns = 4, maxDiameter = 88f, tier = 2, gap = 14f)
         }
 
     /** Equal bubbles in rows of [columns], sized to the screen width, each with its name underneath. */
-    private fun grid(count: Int, width: Float, labelScale: Float, columns: Int, maxDiameter: Float, tier: Int): OrbitLayoutResult {
+    private fun grid(count: Int, width: Float, labelScale: Float, columns: Int, maxDiameter: Float, tier: Int, gap: Float): OrbitLayoutResult {
         val margin = 12f
         val cell = (width - 2f * margin) / columns
-        val diameter = (cell - 14f).coerceAtMost(maxDiameter).coerceAtLeast(40f)
+        val diameter = (cell - gap).coerceAtMost(maxDiameter).coerceAtLeast(40f)
         val labelHeight = labelHeight(2, labelScale)
         val top = 16f
         val slots = (0 until count).map { index ->
