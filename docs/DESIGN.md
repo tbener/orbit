@@ -84,10 +84,10 @@ Confirmations (pin, unpin, move) use one small glass toast with Undo. Reduced mo
 Controls are minimal. **Header:** the small gradient "Orbit" wordmark and AI sparkle status on the left; Rules and add general instruction
 (sparkle) on the right. **Bottom bar:** a round glass Settings button on the left, the "Open dialer" pill (accent gradient in
 dark, deep navy in light) in the middle, a round glass Search button on the right, above the nav bar. Swiping down on the
-bubbles refreshes with the sparkle indicator. **Reason card** (one
-place for the reason, above the bar): "Why Gil is first" for the top contact; while a bubble's quick actions are open
-it swaps (fade and slide) to that contact's "Why Mom is #6" and reason, and returns to the top contact on close. It is
-hidden while search is open.
+bubbles refreshes with the sparkle indicator. **Last calc:** with AI suggestions on, a small line under the wordmark says when the AI last ranked ("Last calc: 12 min ago",
+"Last calc: 14:05", "Last calc: not yet"). **Notice card:** the card above the bottom bar no longer shows a reason. It is kept as
+a general note slot (`HomeUiState.notice`, null today, so it is hidden) for later messages such as "You wanted to call Aharon
+every 3 weeks, this is the time...". It animates in and out, and is hidden while search is open.
 
 **Search:** tapping the button slides a field down at the top, under the status bar (spring and fade, focus and keyboard at
 once; it never sits on the keyboard) and the bottom bar fades out. The bubbles dim and blur, and a scrollable glass panel under

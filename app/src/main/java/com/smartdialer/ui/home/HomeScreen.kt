@@ -209,9 +209,8 @@ fun HomeScreen(
     // The screen softly blurs behind the quick actions and the search (Android 12 and up; older versions only dim).
     val blur by animateDpAsState(if (quick != null || searchOpen) 14.dp else 0.dp, Orbit.motion.move(), label = "blur")
 
-    // The one place for the reason: the top contact, or the contact whose quick actions are open.
-    val reasonTarget: Pair<Suggestion, Int>? = quick?.let { it.suggestion to it.rank }
-        ?: state.suggestions.firstOrNull()?.let { it to 1 }
+    // The notice card above the bottom bar (empty for now, kept for later notes).
+    val notice = state.notice
 
     OrbitBackground {
         Box(Modifier.fillMaxSize()) {
@@ -230,6 +229,7 @@ fun HomeScreen(
                                 !state.aiOn || state.aiProblem -> AiIndicatorState.Paused
                                 else -> null
                             },
+                            lastCalc = if (state.aiOn) lastCalcLabel(System.currentTimeMillis(), state.lastCalcAt) else null,
                             onOpenRules = onOpenRules,
                             onOpenAiSettings = onOpenAiSettings,
                             onAddInstruction = { showGeneralSheet = true },
@@ -287,7 +287,7 @@ fun HomeScreen(
                     }
                     val barAlpha by animateFloatAsState(if (searchOpen) 0f else 1f, Orbit.motion.move(), label = "bar")
                     BottomPanel(
-                        cardSpace = if (reasonTarget != null && !needsAccess) cardHeight else 0.dp,
+                        cardSpace = if (notice != null && !needsAccess) cardHeight else 0.dp,
                         onOpenDialer = onOpenDialer,
                         onOpenSearch = { searchOpen = true },
                         onOpenSettings = onOpenAiSettings,
@@ -313,15 +313,15 @@ fun HomeScreen(
             // The reason card sits above the dimmed screen, so it stays readable while the quick actions are open.
             val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             AnimatedVisibility(
-                visible = reasonTarget != null && !searchOpen && !needsAccess,
+                visible = notice != null && !searchOpen && !needsAccess,
                 enter = fadeIn(Orbit.motion.enter()) + slideInVertically(Orbit.motion.enter()) { it / 3 },
                 exit = fadeOut(Orbit.motion.exit()) + slideOutVertically(Orbit.motion.exit()) { it / 3 },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(start = Orbit.spacing.lg, end = Orbit.spacing.lg, bottom = navBottom + controlsHeight + Orbit.spacing.lg + Orbit.spacing.sm),
             ) {
-                ReasonCard(
-                    target = reasonTarget,
+                NoticeCard(
+                    notice = notice,
                     modifier = Modifier.onSizeChanged { cardHeight = with(density) { it.height.toDp() } + Orbit.spacing.md },
                 )
             }
@@ -394,6 +394,7 @@ fun HomeScreen(
 @Composable
 private fun HomeHeader(
     indicator: AiIndicatorState?,
+    lastCalc: String?,
     onOpenRules: () -> Unit,
     onOpenAiSettings: () -> Unit,
     onAddInstruction: () -> Unit,
@@ -403,6 +404,7 @@ private fun HomeHeader(
         modifier = Modifier.fillMaxWidth().padding(start = Orbit.spacing.xl, end = Orbit.spacing.lg, top = Orbit.spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Column {
         Text(
             text = "Orbit",
             style = MaterialTheme.typography.titleMedium.copy(
@@ -412,6 +414,14 @@ private fun HomeHeader(
             ),
             modifier = Modifier.semantics { heading() },
         )
+        if (lastCalc != null) {
+            Text(
+                text = lastCalc,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        }
         if (indicator != null) {
             Box(
                 Modifier
@@ -502,22 +512,23 @@ private fun RoundGlassButton(icon: androidx.compose.ui.graphics.vector.ImageVect
     }
 }
 
-/** Why the shown contact is where they are: one card, swapped in place when another contact's actions open. */
+/**
+ * A card above the bottom bar for a short note, swapped in place when the note changes. Not shown while there is no
+ * notice. Kept for later, for example "You wanted to call Aharon every 3 weeks, this is the time...".
+ */
 @Composable
-private fun ReasonCard(target: Pair<Suggestion, Int>?, modifier: Modifier = Modifier) {
+private fun NoticeCard(notice: Notice?, modifier: Modifier = Modifier) {
     val motion = Orbit.motion
     Box(modifier.fillMaxWidth()) {
         AnimatedContent(
-            targetState = target,
+            targetState = notice,
             transitionSpec = {
                 (fadeIn(motion.enter(motion.shortMillis)) + slideInVertically(motion.enter(motion.shortMillis)) { it / 5 }) togetherWith
                     (fadeOut(motion.exit(motion.shortMillis)) + slideOutVertically(motion.exit(motion.shortMillis)) { -it / 5 })
             },
-            label = "reason",
+            label = "notice",
         ) { shown ->
             if (shown != null) {
-                val (suggestion, rank) = shown
-                val title = if (rank == 1) "Why ${suggestion.contact.name} is first" else "Why ${suggestion.contact.name} is #$rank"
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -527,8 +538,8 @@ private fun ReasonCard(target: Pair<Suggestion, Int>?, modifier: Modifier = Modi
                         .padding(horizontal = Orbit.spacing.lg, vertical = Orbit.spacing.md)
                         .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
                 ) {
-                    Text(title, style = MaterialTheme.typography.labelLarge, color = Orbit.colors.accent)
-                    Text(suggestion.reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
+                    Text(shown.title, style = MaterialTheme.typography.labelLarge, color = Orbit.colors.accent)
+                    Text(shown.text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
                 }
             }
         }
@@ -825,4 +836,20 @@ private fun ToastAction(label: String, color: Color, onClick: () -> Unit) {
             .padding(horizontal = Orbit.spacing.md),
         contentAlignment = Alignment.Center,
     ) { Text(label, style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.SemiBold) }
+}
+
+/** "Last calc: 12 min ago", "Last calc: 14:05" (today), "Last calc: Sat 14:05", or "Last calc: not yet". */
+internal fun lastCalcLabel(nowMillis: Long, atMillis: Long?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): String {
+    if (atMillis == null) return "Last calc: not yet"
+    val minutes = ((nowMillis - atMillis) / 60_000L).coerceAtLeast(0)
+    if (minutes < 1) return "Last calc: just now"
+    if (minutes < 60) return "Last calc: $minutes min ago"
+    val then = java.time.Instant.ofEpochMilli(atMillis).atZone(zone)
+    val today = java.time.Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+    val time = "%02d:%02d".format(then.hour, then.minute)
+    return if (then.toLocalDate() == today) {
+        "Last calc: $time"
+    } else {
+        "Last calc: ${then.dayOfWeek.getDisplayName(java.time.format.TextStyle.SHORT, java.util.Locale.ENGLISH)} $time"
+    }
 }

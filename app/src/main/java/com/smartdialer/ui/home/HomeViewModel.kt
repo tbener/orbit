@@ -63,7 +63,17 @@ data class HomeUiState(
     val pinnedSlots: Map<String, Int> = emptyMap(),
     /** The small glass confirmation (pin, unpin, move) with its actions, shown for about six seconds. */
     val toast: Toast? = null,
+    /** When the AI last ranked successfully (epoch millis), for the "Last calc" line. */
+    val lastCalcAt: Long? = null,
+    /**
+     * A note for the card above the bottom bar. Nothing sets it yet; it is kept for later, for things like
+     * "You wanted to call Aharon every 3 weeks, this is the time...". Null hides the card.
+     */
+    val notice: Notice? = null,
 )
+
+/** The card above the bottom bar: a short [title] and a [text]. */
+class Notice(val title: String, val text: String)
 
 /** A glass toast: [text], an optional primary action (such as "Pin") and an optional Undo. */
 class Toast(
@@ -177,6 +187,7 @@ class HomeViewModel(
             pinnedSlots = all.withIndex().filter { it.value.isPinned }.associate { it.value.contact.id to it.index + 1 }
                 .also { latestPinned = it },
             toast = local.toast,
+            lastCalcAt = ai.lastSuccessAt,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
