@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.selection.toggleable
+import com.smartdialer.data.EngineMode
 import com.smartdialer.data.LayoutMode
 import com.smartdialer.llm.RefreshScheduler
 import com.smartdialer.ui.components.InfoDialog
@@ -61,6 +62,9 @@ class SettingsActions(
     val onRefreshNow: () -> Unit,
     val onOpenInspector: () -> Unit,
     val onSetLayout: (LayoutMode) -> Unit,
+    val onSetEngine: (EngineMode) -> Unit,
+    val onOpenCompare: () -> Unit,
+    val onOpenTuning: () -> Unit,
     val onSetWhatsApp: (Boolean) -> Unit,
     val onOpenNotificationAccess: () -> Unit,
     val onDeleteWhatsApp: () -> Unit,
@@ -115,6 +119,7 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
     var confirmDelete by remember { mutableStateOf(false) }
     var showWhatsAppInfo by remember { mutableStateOf(false) }
     var showLayoutInfo by remember { mutableStateOf(false) }
+    var showEngineInfo by remember { mutableStateOf(false) }
 
     OrbitBackground {
         Scaffold(containerColor = Color.Transparent) { padding ->
@@ -125,6 +130,33 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
                     contentPadding = PaddingValues(start = Orbit.spacing.lg, end = Orbit.spacing.lg, bottom = Orbit.spacing.xxl),
                     verticalArrangement = Arrangement.spacedBy(Orbit.spacing.md),
                 ) {
+                    item {
+                        SectionHeader(
+                            kind = RuleKind.Soft,
+                            icon = Icons.Filled.AutoAwesome,
+                            title = "Ranking engine",
+                            subtitle = "Who decides the order.",
+                            onInfo = { showEngineInfo = true },
+                        )
+                    }
+                    item {
+                        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.sm)) {
+                            EngineMode.entries.forEach { mode ->
+                                com.smartdialer.ui.components.OrbitChip(mode.label, state.engineMode == mode, { actions.onSetEngine(mode) })
+                            }
+                        }
+                    }
+                    item {
+                        Text(
+                            if (state.engineMode == EngineMode.LOCAL) {
+                                "Local: Orbit scores contacts on this phone, with no AI call to rank. The AI is only asked when you add or edit an instruction."
+                            } else {
+                                "AI ranking: the AI model ranks your contacts (the earlier way). It counts toward the daily limit."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                     item {
                         SectionHeader(
                             kind = RuleKind.Soft,
@@ -235,6 +267,22 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
                     }
                     item {
                         SolidButton(
+                            label = "Compare engines",
+                            icon = Icons.Filled.Visibility,
+                            onClick = actions.onOpenCompare,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    item {
+                        SolidButton(
+                            label = "Tune weights",
+                            icon = Icons.Filled.Visibility,
+                            onClick = actions.onOpenTuning,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    item {
+                        SolidButton(
                             label = "What the LLM sees",
                             icon = Icons.Filled.Visibility,
                             onClick = actions.onOpenInspector,
@@ -321,6 +369,16 @@ fun SettingsScreen(state: SettingsUiState, nowMillis: Long, actions: SettingsAct
                 }
             }
         }
+    }
+
+    if (showEngineInfo) {
+        InfoDialog(
+            title = "Ranking engine",
+            body = "Local (default) scores every contact on your phone from your call history, WhatsApp activity and your instructions, " +
+                "so ranking costs no AI call and works offline. The AI only compiles an instruction into effects when you add or edit one. " +
+                "AI ranking is the earlier way: the model decides the order. \"Compare engines\" shows both side by side.",
+            onDismiss = { showEngineInfo = false },
+        )
     }
 
     if (showLayoutInfo) {

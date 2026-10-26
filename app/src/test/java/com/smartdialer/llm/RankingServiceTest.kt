@@ -149,7 +149,9 @@ class RankingServiceTest {
         val scope = TestScope(UnconfinedTestDispatcher(testScheduler))
         val e = env(FakeLlmClient.answering(good))
         e.rules.addTypedRule(TypedRuleParams.PinToSlot(ContactRef("b", "B"), 1))
-        val repo = AiSuggestionsRepository(e.local, e.cache, e.settings, e.contacts, e.service, scope.backgroundScope)
+        val engine = com.smartdialer.data.EngineSettings(null).also { it.setMode(com.smartdialer.data.EngineMode.AI) }
+        val localRanking = com.smartdialer.data.LocalRanking(e.local, e.contacts, e.rules, engine, kotlinx.coroutines.flow.flowOf(emptyList()), scope.backgroundScope)
+        val repo = AiSuggestionsRepository(e.local, e.cache, e.settings, e.contacts, e.service, scope.backgroundScope, localRanking, engine)
         val pipeline = SuggestionPipeline(repo, e.rules, e.contacts, scope.backgroundScope)
 
         // Before any AI result: the fallback order, with the pin already applied.

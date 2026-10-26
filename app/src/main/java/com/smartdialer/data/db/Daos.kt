@@ -19,8 +19,8 @@ interface FreeTextRuleDao {
     /** Editing a soft or unclear rule sends it back for classification; a converted rule keeps its typed rule. */
     @Query(
         "UPDATE free_text_rules SET text = :text, " +
-            "status = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW', 'REJECTED_OFF_TOPIC') THEN 'UNCLASSIFIED' ELSE status END, " +
-            "explanation = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW', 'REJECTED_OFF_TOPIC') THEN NULL ELSE explanation END, " +
+            "status = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW', 'REJECTED_OFF_TOPIC', 'COMPILED', 'UNSUPPORTED') THEN 'UNCLASSIFIED' ELSE status END, " +
+            "explanation = CASE WHEN status IN ('SOFT', 'NEEDS_REVIEW', 'REJECTED_OFF_TOPIC', 'COMPILED', 'UNSUPPORTED') THEN NULL ELSE explanation END, " +
             "proposedType = NULL, proposedSlot = NULL WHERE id = :id",
     )
     suspend fun updateText(id: Long, text: String)
@@ -95,6 +95,24 @@ interface LlmExchangeDao {
 
     @androidx.room.Upsert
     suspend fun upsert(exchange: LlmExchangeEntity)
+}
+
+@Dao
+interface CompiledEffectDao {
+    @Query("SELECT * FROM compiled_effects ORDER BY createdAt, id")
+    fun observeAll(): Flow<List<CompiledEffectEntity>>
+
+    @Insert
+    suspend fun insert(effect: CompiledEffectEntity): Long
+
+    @Query("UPDATE compiled_effects SET enabled = :enabled WHERE id = :id")
+    suspend fun setEnabled(id: Long, enabled: Boolean)
+
+    @Query("DELETE FROM compiled_effects WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("DELETE FROM compiled_effects WHERE sourceRuleId = :ruleId")
+    suspend fun deleteForRule(ruleId: Long)
 }
 
 @Dao

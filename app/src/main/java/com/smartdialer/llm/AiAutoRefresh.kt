@@ -1,5 +1,8 @@
 package com.smartdialer.llm
 
+import com.smartdialer.data.EngineMode
+import com.smartdialer.data.EngineSettings
+import com.smartdialer.data.LocalRanking
 import com.smartdialer.rules.RulesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -8,27 +11,43 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
- * Refreshes right away (no delay) when an instruction is added, edited or deleted, and classifies it first.
- * The service decides whether the LLM input really changed: hard rules (pins and hides) are applied by the
- * enforcement layer at once and need no call. If a refresh is already running, one follow-up is queued.
+ * Reacts right away (no delay) when an instruction is added, edited or deleted. In Local mode that compiles the
+ * instruction (the only LLM call) and the local engine updates itself from the new effects. In AI ranking mode the
+ * ranking is refreshed (it compiles first). Hard rules need no call: enforcement applies them at once. If a refresh is
+ * already running, one follow-up is queued.
  */
 class AiAutoRefresh(
     scope: CoroutineScope,
     rules: RulesRepository,
     private val settings: AiSettings,
     private val service: RankingService,
+    private val classifier: RuleClassifier,
+    private val engine: EngineSettings,
+    private val localRanking: LocalRanking,
 ) {
     init {
-        // Turning AI on (or accepting the disclosure) with no cached ranking yet: one initial refresh.
+        // Turning AI on (or accepting the disclosure): compile what is waiting, or in AI mode do the first ranking.
         scope.launch {
-            settings.state.map { it.canCallLlm }.distinctUntilChanged().collect { if (it) service.refresh(RefreshTrigger.INITIAL) }
+            settings.state.map { it.canCallLlm }.distinctUntilChanged().collect {
+                if (it) {
+                    if (engine.mode.value == EngineMode.LOCAL) classifier.classifyPending() else service.refresh(RefreshTrigger.INITIAL)
+                }
+            }
         }
         scope.launch {
             rules.freeTextRules
                 .map { list -> list.map { listOf(it.id, it.text, it.status, it.contactKey) } }
                 .distinctUntilChanged()
                 .drop(1) // the rules as they were when the app started are not a change
-                .collect { if (settings.state.value.canCallLlm) service.refresh(RefreshTrigger.INSTRUCTION) }
+                .collect {
+                    if (!settings.state.value.canCallLlm) return@collect
+                    if (engine.mode.value == EngineMode.LOCAL) {
+                        classifier.classifyPending()
+                        localRanking.recompute()
+                    } else {
+                        service.refresh(RefreshTrigger.INSTRUCTION)
+                    }
+                }
         }
     }
 }

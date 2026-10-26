@@ -68,6 +68,8 @@ data class ContactActivity(
     val signals: ContactSignals,
     /** When each of the contact's numbers (by [CallMatcher.numberKey]) was last used. */
     val lastUsedByNumberKey: Map<String, Long>,
+    /** Conversation counts and habits for the local scoring engine. */
+    val stats: ActivityStats = ActivityStats.EMPTY,
 )
 
 /** Plain-language lines describing [ContactSignals], for the Details screen. */

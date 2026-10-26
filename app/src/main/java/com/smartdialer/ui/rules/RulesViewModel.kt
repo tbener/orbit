@@ -27,6 +27,8 @@ data class RulesUiState(
     val trace: List<TraceEntry> = emptyList(),
     /** Instructions kept but not sent to the LLM because of the per-request limit. */
     val unusedInstructions: Int = 0,
+    /** Effects the instructions were compiled into. */
+    val effects: List<com.smartdialer.ranking.CompiledEffect> = emptyList(),
 )
 
 class RulesViewModel(
@@ -40,8 +42,9 @@ class RulesViewModel(
         rules.typedRules,
         contacts.contacts,
         pipeline.result,
-    ) { freeText, typed, deviceContacts, enforced ->
-        RulesUiState(freeText, typed, deviceContacts?.map { it.contact }, enforced.trace, InstructionLimits.unusedCount(freeText))
+        rules.effects,
+    ) { freeText, typed, deviceContacts, enforced, effects ->
+        RulesUiState(freeText, typed, deviceContacts?.map { it.contact }, enforced.trace, InstructionLimits.unusedCount(freeText), effects)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RulesUiState())
 
     fun addFreeText(text: String) {
@@ -80,6 +83,22 @@ class RulesViewModel(
         viewModelScope.launch {
             rules.deleteTypedRule(typedRuleId)
             rules.setClassification(freeTextId, FreeTextStatus.SOFT, "You made this a soft instruction.")
+        }
+    }
+
+    fun setEffectEnabled(id: Long, enabled: Boolean) {
+        viewModelScope.launch { rules.setEffectEnabled(id, enabled) }
+    }
+
+    fun deleteEffect(id: Long) {
+        viewModelScope.launch { rules.deleteEffect(id) }
+    }
+
+    /** Throws away what the model decided for this instruction and asks again (one LLM call). */
+    fun recompile(freeTextId: Long) {
+        viewModelScope.launch {
+            rules.clearEffects(freeTextId)
+            rules.setClassification(freeTextId, FreeTextStatus.UNCLASSIFIED, null)
         }
     }
 

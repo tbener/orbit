@@ -5,7 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.Contact
 import com.smartdialer.data.AiSuggestionsRepository
 import com.smartdialer.data.ContactActivity
+import com.smartdialer.data.EngineMode
+import com.smartdialer.data.EngineSettings
 import com.smartdialer.data.LayoutMode
+import com.smartdialer.data.LocalRanking
 import com.smartdialer.data.ManualArrangement
 import com.smartdialer.ranking.Reorder
 import com.smartdialer.data.UiSettings
@@ -118,6 +121,8 @@ class HomeViewModel(
     private val uiSettings: UiSettings,
     private val ai: AiSuggestionsRepository,
     private val manualArrangement: ManualArrangement,
+    engine: EngineSettings,
+    localRanking: LocalRanking,
 ) : ViewModel() {
 
     private data class Local(
@@ -133,6 +138,7 @@ class HomeViewModel(
         val hidden: Set<String>,
         val searchSuggestions: SearchSuggestions,
         val layoutMode: LayoutMode,
+        val lastCalcAt: Long?,
     )
 
     private var frozenAll: List<Suggestion>? = null
@@ -155,16 +161,19 @@ class HomeViewModel(
         suggestions.isRefreshing,
         visibleCount,
         local,
-        combine(aiSettings.state, rules.typedRules, suggestions.activity, contacts.contacts, uiSettings.layoutMode) { ai, typed, activity, deviceContacts, layout ->
+        combine(aiSettings.state, rules.typedRules, suggestions.activity, contacts.contacts,
+            combine(uiSettings.layoutMode, engine.mode, localRanking.state) { l, m, st -> Triple(l, m, st?.nowMillis) },
+        ) { ai, typed, activity, deviceContacts, (layout, mode, localAt) ->
             Extras(
                 ai,
                 typed.map { it.params }.filterIsInstance<TypedRuleParams.NeverShow>().map { it.contact.lookupKey }.toSet(),
                 SearchSuggestionsBuilder.build(activity, deviceContacts),
                 layout,
+                if (mode == EngineMode.LOCAL) localAt else ai.lastSuccessAt,
             )
         },
     ) { enforced, refreshing, count, local, extras ->
-        val (ai, hidden, searchSuggestions, layoutMode) = extras
+        val (ai, hidden, searchSuggestions, layoutMode, lastCalcAt) = extras
         // While a bubble is being dragged, new results wait: the list is frozen and updated right after the drop.
         val all = if (local.dragging) (frozenAll ?: enforced.suggestions.also { frozenAll = it }) else enforced.suggestions.also { frozenAll = null }
         val visible = all.take(count)
@@ -187,7 +196,7 @@ class HomeViewModel(
             pinnedSlots = all.withIndex().filter { it.value.isPinned }.associate { it.value.contact.id to it.index + 1 }
                 .also { latestPinned = it },
             toast = local.toast,
-            lastCalcAt = ai.lastSuccessAt,
+            lastCalcAt = lastCalcAt,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 

@@ -79,6 +79,16 @@ data class LlmExchangeEntity(
     val errors: String,
 )
 
+/** An effect an instruction was compiled into. [paramsJson] holds the type-specific parameters. */
+@Entity(tableName = "compiled_effects", indices = [Index("sourceRuleId")])
+data class CompiledEffectEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sourceRuleId: Long,
+    val paramsJson: String,
+    val enabled: Boolean,
+    val createdAt: Long,
+)
+
 /** One WhatsApp event: who, when, direction. Never any message content. */
 @Entity(tableName = "whatsapp_events", indices = [Index("at")])
 data class WhatsAppEventEntity(

@@ -18,12 +18,31 @@ class RoomRulesRepository(
 
     private val freeText = db.freeTextRuleDao()
     private val typed = db.typedRuleDao()
+    private val effectDao = db.compiledEffectDao()
 
     override val freeTextRules: Flow<List<FreeTextRule>> =
         freeText.observeAll().map { rows -> rows.map(FreeTextRuleEntity::toDomain) }
 
     override val typedRules: Flow<List<TypedRule>> =
         typed.observeAll().map { rows -> rows.mapNotNull(TypedRuleEntity::toDomainOrNull) }
+
+    override val effects: Flow<List<com.smartdialer.ranking.CompiledEffect>> =
+        effectDao.observeAll().map { rows ->
+            rows.mapNotNull { row ->
+                runCatching { com.smartdialer.ranking.EffectCodec.decode(row.paramsJson) }.getOrNull()
+                    ?.let { com.smartdialer.ranking.CompiledEffect(row.id, row.sourceRuleId, it, row.enabled) }
+            }
+        }
+
+    override suspend fun addEffects(ruleId: Long, params: List<com.smartdialer.ranking.EffectParams>) {
+        params.forEach {
+            effectDao.insert(CompiledEffectEntity(sourceRuleId = ruleId, paramsJson = com.smartdialer.ranking.EffectCodec.encode(it), enabled = true, createdAt = nowMillis()))
+        }
+    }
+
+    override suspend fun setEffectEnabled(id: Long, enabled: Boolean) = effectDao.setEnabled(id, enabled)
+    override suspend fun deleteEffect(id: Long) = effectDao.delete(id)
+    override suspend fun clearEffects(ruleId: Long) = effectDao.deleteForRule(ruleId)
 
     override suspend fun addFreeTextRule(text: String, contactKey: String?): Long =
         freeText.insert(
@@ -36,8 +55,11 @@ class RoomRulesRepository(
             ),
         )
 
-    override suspend fun updateFreeTextRule(id: Long, text: String) =
+    override suspend fun updateFreeTextRule(id: Long, text: String) = db.withTransaction {
+        // An edited instruction is compiled again, so its old effects go.
+        effectDao.deleteForRule(id)
         freeText.updateText(id, text.trim().take(InstructionLimits.MAX_LENGTH))
+    }
 
     override suspend fun setClassification(
         id: Long,
@@ -49,6 +71,7 @@ class RoomRulesRepository(
 
     override suspend fun deleteFreeTextRule(id: Long) = db.withTransaction {
         typed.clearSource(id)
+        effectDao.deleteForRule(id)
         freeText.delete(id)
     }
 

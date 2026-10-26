@@ -125,6 +125,8 @@ are a plain list (`quickActionsFor`), so adding a button needs no layout change.
 
 ## Settings
 
+Settings starts with the ranking engine (Local or AI ranking, as two chips). Advanced buttons open "Compare engines" (two columns, rank differences marked with arrows, tap a local row for its breakdown), "Tune weights" (sliders and a live top-15 list) and "What the LLM sees". On the Rules page each compiled instruction lists its effects in plain language with a switch and a delete button, plus Recompile.
+
 A gear button next to Rules opens Settings: the AI switch, last update and status, "Refresh now", and "What the LLM sees" (request, raw answer, validation issues, monospace and selectable). A small cloud-off icon appears next to the title when the last refresh failed; the last good suggestions stay on screen.
 
 ## Rules and Details

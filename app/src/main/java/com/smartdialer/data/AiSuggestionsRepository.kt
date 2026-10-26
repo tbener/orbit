@@ -7,6 +7,7 @@ import com.smartdialer.llm.RankingService
 import com.smartdialer.llm.RefreshOutcome
 import com.smartdialer.llm.RefreshTrigger
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -24,45 +25,71 @@ class AiSuggestionsRepository(
     contacts: ContactsRepository,
     private val service: RankingService,
     scope: CoroutineScope,
+    private val localRanking: LocalRanking,
+    private val engine: EngineSettings,
 ) : SuggestionsRepository {
 
     override val suggestions: StateFlow<List<Suggestion>> = combine(
-        local.suggestions,
-        cache.ranking,
-        settings.state,
-        contacts.contacts,
-    ) { fallback, ranking, state, deviceContacts ->
-        SuggestionMerger.merge(
-            fallback = fallback,
-            ranking = ranking.takeIf { state.enabled },
-            contacts = deviceContacts?.associate { it.contact.id to it.contact },
-        )
+        combine(local.suggestions, cache.ranking, settings.state, contacts.contacts) { fallback, ranking, state, deviceContacts ->
+            // The AI path: the cached LLM ranking when AI suggestions are on and there is one.
+            SuggestionMerger.merge(
+                fallback = fallback,
+                ranking = ranking.takeIf { state.enabled },
+                contacts = deviceContacts?.associate { it.contact.id to it.contact },
+            ) to (fallback to deviceContacts)
+        },
+        engine.mode,
+        localRanking.state,
+    ) { (aiList, base), mode, localState ->
+        val (fallback, deviceContacts) = base
+        if (mode == EngineMode.LOCAL && localState != null) {
+            LocalSuggestions.build(fallback, localState.ranked, deviceContacts?.associate { it.contact.id to it.contact })
+        } else {
+            aiList
+        }
     }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
     override val activity = local.activity
 
-    /** True only while the LLM ranking call is running, not while the local call log is read. */
-    override val isRefreshing: StateFlow<Boolean> = service.isRefreshing
+    private val localRefreshing = MutableStateFlow(false)
+
+    /** True while the LLM ranking call runs, or briefly while the local engine runs for a swipe. */
+    override val isRefreshing: StateFlow<Boolean> =
+        combine(service.isRefreshing, localRefreshing) { a, b -> a || b }.stateIn(scope, SharingStarted.Eagerly, false)
 
     /**
-     * Reads contacts and the call log (so the fallback list is current at once). The LLM ranking is only asked for
-     * when there is no cached ranking yet; later refreshes come from the schedule, a swipe, or a changed instruction.
+     * Reads contacts and the call log (so the fallback list is current at once) and runs the local engine. In AI
+     * ranking mode the LLM ranking is only asked for when there is no cached ranking yet.
      */
     override suspend fun refresh() {
         local.refresh()
-        service.refresh(RefreshTrigger.INITIAL)
+        localRanking.recompute()
+        if (engine.mode.value == EngineMode.AI) service.refresh(RefreshTrigger.INITIAL)
     }
 
-    /** The scheduled background refresh (morning and evening). */
+    /** The scheduled background refresh (morning and evening). Local mode makes no LLM call. */
     suspend fun refreshScheduled(): RefreshOutcome {
         local.refresh()
-        return service.refresh(RefreshTrigger.SCHEDULED)
+        localRanking.recompute()
+        return if (engine.mode.value == EngineMode.AI) service.refresh(RefreshTrigger.SCHEDULED) else RefreshOutcome.Updated
     }
 
-    /** Swipe down on the bubbles, or "Refresh now" in Settings. Counts against the daily cap. */
+    /** Swipe down, or "Refresh now" in Settings. Local mode makes no LLM call; AI mode counts against the daily cap. */
     suspend fun refreshManual(): RefreshOutcome {
-        local.refresh()
-        return service.refresh(RefreshTrigger.MANUAL)
+        if (engine.mode.value == EngineMode.AI) {
+            local.refresh()
+            localRanking.recompute()
+            return service.refresh(RefreshTrigger.MANUAL)
+        }
+        localRefreshing.value = true
+        try {
+            local.refresh()
+            localRanking.recompute()
+            kotlinx.coroutines.delay(600) // long enough to see the indicator
+        } finally {
+            localRefreshing.value = false
+        }
+        return RefreshOutcome.Updated
     }
 }
 

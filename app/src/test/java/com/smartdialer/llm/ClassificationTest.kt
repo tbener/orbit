@@ -16,12 +16,12 @@ class ClassificationTest {
     private val people = listOf(Contact("k-mom", "Mom"), Contact("k-ron1", "Ron Cohen"), Contact("k-ron2", "Ron Levi"), Contact("k-dana", "Dana Levi"))
 
     private fun rule(text: String, key: String? = null) = FreeTextRule(1, text, 1, FreeTextStatus.UNCLASSIFIED, null, key)
-    private fun hard(action: ModelAction, name: String, slot: Int = 0) = ModelClassification(1, true, false, action, slot, name, "because")
+    private fun hard(action: ModelAction, name: String, slot: Int = 0) = ModelClassification(1, ModelKind.HARD, action, slot, name, "because")
     private fun resolve(r: FreeTextRule, m: ModelClassification) = ClassificationResolver.resolve(r, m, people, 20)
 
     @Test
     fun softStaysSoft() {
-        assertTrue(resolve(rule("every 3 days", "k-mom"), ModelClassification(1, false, false, ModelAction.NONE, 0, "", "soft")) is ClassificationDecision.Soft)
+        assertTrue(resolve(rule("every 3 days", "k-mom"), ModelClassification(1, ModelKind.SOFT, ModelAction.NONE, 0, "", "soft")) is ClassificationDecision.Soft)
     }
 
     @Test
@@ -56,7 +56,7 @@ class ClassificationTest {
 
     @Test
     fun parserDropsUnknownIds() {
-        val text = """{"classifications":[{"ruleId":1,"kind":"SOFT","action":"NONE","slot":0,"personName":"","explanation":"e"},{"ruleId":9,"kind":"SOFT","action":"NONE","slot":0,"personName":"","explanation":"e"}]}"""
+        val text = """{"classifications":[{"ruleId":1,"kind":"UNSUPPORTED","action":"NONE","slot":0,"personName":"","explanation":"e"},{"ruleId":9,"kind":"UNSUPPORTED","action":"NONE","slot":0,"personName":"","explanation":"e"}]}"""
         val p = ClassificationParser.parse(text, setOf(1L, 2L)) as ClassificationParse.Valid
         assertEquals(1, p.items.size)
         assertTrue(p.issues.any { "unknown" in it } && p.issues.any { "stay unclassified" in it })

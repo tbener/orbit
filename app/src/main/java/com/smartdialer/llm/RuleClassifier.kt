@@ -45,6 +45,10 @@ class RuleClassifier(
         deviceContacts: List<com.smartdialer.data.Contact>,
         names: Map<String, String>,
     ): Boolean {
+        // The compile call counts toward the daily cap on LLM calls, like a ranking refresh.
+        val today = java.time.Instant.ofEpochMilli(clock()).atZone(java.time.ZoneId.systemDefault()).toLocalDate()
+        if (!RefreshQuota.canStart(settings.state.value, today)) return false
+        settings.incrementRefreshCount(RefreshQuota.dayKey(today))
         val request = ClassificationPrompt.request(
             batch.map { RuleToClassify(it.id, it.text, it.contactKey?.let(names::get)) },
             MAX_SUGGESTIONS,
@@ -77,6 +81,13 @@ class RuleClassifier(
                     rules.setClassification(current.id, FreeTextStatus.REJECTED_OFF_TOPIC, InstructionLimits.OFF_TOPIC_MESSAGE)
                 is ClassificationDecision.Soft ->
                     rules.setClassification(current.id, FreeTextStatus.SOFT, decision.explanation)
+                is ClassificationDecision.Compiled -> {
+                    rules.addEffects(current.id, decision.effects)
+                    rules.setClassification(current.id, FreeTextStatus.COMPILED, decision.explanation)
+                    decision.dropped.forEach { errors += "Rule ${current.id}: an effect was left out (${it})." }
+                }
+                is ClassificationDecision.Unsupported ->
+                    rules.setClassification(current.id, FreeTextStatus.UNSUPPORTED, decision.explanation)
                 is ClassificationDecision.Hard ->
                     rules.addTypedRule(decision.params, sourceFreeTextRuleId = current.id, explanation = decision.explanation)
                 is ClassificationDecision.NeedsReview ->

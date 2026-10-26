@@ -76,7 +76,7 @@ class MigrationTest {
 
         val context = ApplicationProvider.getApplicationContext<Context>()
         val db = Room.databaseBuilder(context, OrbitDatabase::class.java, dbName)
-            .addMigrations(OrbitDatabase.MIGRATION_1_2, OrbitDatabase.MIGRATION_2_3, OrbitDatabase.MIGRATION_3_4)
+            .addMigrations(OrbitDatabase.MIGRATION_1_2, OrbitDatabase.MIGRATION_2_3, OrbitDatabase.MIGRATION_3_4, OrbitDatabase.MIGRATION_4_5)
             .build()
         try {
             val repo = RoomRulesRepository(db)
@@ -119,6 +119,17 @@ class MigrationTest {
         val db = helper.runMigrationsAndValidate(dbName, 4, true, OrbitDatabase.MIGRATION_3_4)
         db.execSQL("INSERT INTO whatsapp_events (contactKey, at, outgoing) VALUES ('k', 5, 0)")
         db.query("SELECT COUNT(*) FROM whatsapp_events").use { c ->
+            assertTrue(c.moveToFirst())
+            assertEquals(1, c.getInt(0))
+        }
+    }
+
+    @Test
+    fun migrate4To5_createsTheCompiledEffectsTable() {
+        helper.createDatabase(dbName, 4).close()
+        val db = helper.runMigrationsAndValidate(dbName, 5, true, OrbitDatabase.MIGRATION_4_5)
+        db.execSQL("INSERT INTO compiled_effects (sourceRuleId, paramsJson, enabled, createdAt) VALUES (1, '{}', 1, 5)")
+        db.query("SELECT COUNT(*) FROM compiled_effects").use { c ->
             assertTrue(c.moveToFirst())
             assertEquals(1, c.getInt(0))
         }

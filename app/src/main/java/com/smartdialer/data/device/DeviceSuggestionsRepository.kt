@@ -1,5 +1,6 @@
 package com.smartdialer.data.device
 
+import com.smartdialer.data.ActivityStats
 import com.smartdialer.data.CallLogSource
 import com.smartdialer.data.CallMatcher
 import com.smartdialer.data.ContactActivity
@@ -40,7 +41,7 @@ class DeviceSuggestionsRepository(
             val now = nowMillis()
             val calls = callLogSource.loadCalls(now - HISTORY_WINDOW_MILLIS)
             _activity.value = CallMatcher.groupByContact(contacts, calls).mapValues { (_, records) ->
-                ContactActivity(ContactSignals.from(records), CallMatcher.lastUsedByNumberKey(records))
+                ContactActivity(ContactSignals.from(records, now), CallMatcher.lastUsedByNumberKey(records), ActivityStats.from(records, now))
             }
             _suggestions.value = FallbackRanker.rank(contacts, calls, now)
         } finally {

@@ -3,6 +3,8 @@ package com.smartdialer.ui.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.smartdialer.data.AiSuggestionsRepository
+import com.smartdialer.data.EngineMode
+import com.smartdialer.data.EngineSettings
 import com.smartdialer.data.LayoutMode
 import com.smartdialer.data.UiSettings
 import com.smartdialer.data.WhatsAppEventStore
@@ -39,6 +41,7 @@ data class SettingsUiState(
     val whatsAppGranted: Boolean = false,
     val whatsAppEventCount: Int = 0,
     val layoutMode: LayoutMode = LayoutMode.Grid3,
+    val engineMode: EngineMode = EngineMode.LOCAL,
     /** Ranking refreshes started today, and the daily cap. */
     val refreshCountToday: Int = 0,
     val refreshCap: Int = RefreshQuota.DAILY_CAP,
@@ -59,6 +62,7 @@ class SettingsViewModel(
     private val whatsAppSettings: WhatsAppSettings,
     private val whatsAppStore: WhatsAppEventStore,
     private val uiSettings: UiSettings,
+    private val engine: EngineSettings,
 ) : ViewModel() {
 
     private val whatsAppGranted = MutableStateFlow(false)
@@ -75,9 +79,10 @@ class SettingsViewModel(
     val state: StateFlow<SettingsUiState> = combine(
         combine(settings.state, cache.ranking, service.isRefreshing) { s, ranking, refreshing -> Triple(s, ranking, refreshing) },
         whatsAppState,
-        uiSettings.layoutMode,
-    ) { (s, ranking, refreshing), (waEnabled, waGranted, waCount), layout ->
+        combine(uiSettings.layoutMode, engine.mode) { layout, mode -> layout to mode },
+    ) { (s, ranking, refreshing), (waEnabled, waGranted, waCount), (layout, mode) ->
         SettingsUiState(
+            engineMode = mode,
             layoutMode = layout,
             refreshCountToday = RefreshQuota.countToday(s, java.time.LocalDate.now()),
             whatsAppEnabled = waEnabled,
@@ -111,6 +116,8 @@ class SettingsViewModel(
     }
 
     fun setLayoutMode(mode: LayoutMode) = uiSettings.setLayoutMode(mode)
+
+    fun setEngineMode(mode: EngineMode) = engine.setMode(mode)
 
     fun setWhatsAppEnabled(enabled: Boolean) = whatsAppSettings.setEnabled(enabled)
 

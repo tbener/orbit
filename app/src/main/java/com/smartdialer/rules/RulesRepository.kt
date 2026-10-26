@@ -7,6 +7,17 @@ interface RulesRepository {
     val freeTextRules: Flow<List<FreeTextRule>>
     val typedRules: Flow<List<TypedRule>>
 
+    /** The effects instructions were compiled into (see `ranking.Effects`), oldest first. */
+    val effects: Flow<List<com.smartdialer.ranking.CompiledEffect>>
+
+    /** Stores [params] as effects of the instruction [ruleId], enabled. */
+    suspend fun addEffects(ruleId: Long, params: List<com.smartdialer.ranking.EffectParams>)
+    suspend fun setEffectEnabled(id: Long, enabled: Boolean)
+    suspend fun deleteEffect(id: Long)
+
+    /** Removes every effect of [ruleId] (used by "Recompile" and when the instruction is edited or deleted). */
+    suspend fun clearEffects(ruleId: Long)
+
     /**
      * Stores a new rule as [FreeTextStatus.UNCLASSIFIED]. Returns its id. A rule with a [contactKey]
      * is about that contact; without one it is a general instruction.

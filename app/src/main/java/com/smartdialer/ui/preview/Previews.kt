@@ -158,7 +158,7 @@ private fun DetailsEmpty() {
     OrbitTheme { DetailsScreen(detailsState(empty = true), emptyFlow(), nowMillis = 3L * 86_400_000L, actions = noDetailsActions) }
 }
 
-private val noRulesActions = RulesActions({}, { _, _ -> }, {}, {}, { _, _ -> }, {}, { _, _ -> }, { _, _ -> }, {}, {})
+private val noRulesActions = RulesActions({}, { _, _ -> }, {}, {}, { _, _ -> }, {}, { _, _ -> }, { _, _ -> }, {}, { _, _ -> }, {}, {}, {})
 
 @ThemePreviews
 @Composable

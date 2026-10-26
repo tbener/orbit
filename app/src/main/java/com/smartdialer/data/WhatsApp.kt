@@ -155,7 +155,7 @@ object WhatsAppSignals {
                 whatsAppIncoming7d = incoming.count { it.at >= nowMillis - 7 * DAY },
                 whatsAppIncoming30d = incoming.count { it.at >= nowMillis - 30 * DAY },
             )
-            result[key] = ContactActivity(facts, base[key]?.lastUsedByNumberKey.orEmpty())
+            result[key] = ContactActivity(facts, base[key]?.lastUsedByNumberKey.orEmpty(), base[key]?.stats ?: ActivityStats.EMPTY)
         }
         return result
     }

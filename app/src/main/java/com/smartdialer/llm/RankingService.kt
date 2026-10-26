@@ -84,6 +84,56 @@ class RankingService(
         return outcome
     }
 
+    /** The result of "Compare engines": the AI's order, for display only. Nothing is cached or saved. */
+    sealed interface CompareResult {
+        class Ranked(val order: List<String>, val reasons: Map<String, String>) : CompareResult
+        class Skipped(val reason: SkipReason) : CompareResult
+        class Failed(val message: String) : CompareResult
+    }
+
+    /**
+     * Asks the model to rank the same data once, for the comparison screen. Counts toward the daily cap, is not
+     * saved to the cache, and does not change the "last calc" status.
+     */
+    suspend fun compare(): CompareResult {
+        val s = settings.state.value
+        if (!s.enabled) return CompareResult.Skipped(SkipReason.AI_OFF)
+        if (!s.disclosureAcknowledged) return CompareResult.Skipped(SkipReason.NOT_ACKNOWLEDGED)
+        if (!RefreshQuota.canStart(s, today())) return CompareResult.Skipped(SkipReason.DAILY_CAP)
+        if (gate.tryStart(RefreshTrigger.MANUAL) != RefreshGate.Start.STARTED) return CompareResult.Skipped(SkipReason.BUSY)
+        try {
+            val deviceContacts = contacts.contacts.value ?: return CompareResult.Skipped(SkipReason.NO_CONTACTS)
+            val now = clock()
+            val fullInputs = CandidateSelector.select(
+                contacts = deviceContacts.associate { it.contact.id to it.contact },
+                activity = if (whatsApp != null && whatsAppEnabled()) WhatsAppSignals.merge(local.activity.value, whatsApp.all(), now) else local.activity.value,
+                freeText = rules.freeTextRules.first(),
+                typed = rules.typedRules.first(),
+                nowMillis = now,
+                zone = zone(),
+            )
+            if (fullInputs.candidates.isEmpty()) return CompareResult.Skipped(SkipReason.NO_CANDIDATES)
+            val (inputs, _) = RankingPrompt.fitToSize(fullInputs)
+            settings.incrementRefreshCount(RefreshQuota.dayKey(today()))
+            val result = llm.complete(RankingPrompt.request(inputs))
+            val at = clock()
+            if (result is LlmResult.Failure) {
+                exchanges.save(LlmExchange(RankingPrompt.PURPOSE, at, "Compare failed: ${result.kind.describe()}", result.requestBody, result.responseBody, listOf(result.message)))
+                return CompareResult.Failed(result.kind.describe())
+            }
+            result as LlmResult.Success
+            val keys = inputs.candidates.map { it.contact.id }
+            val parse = RankingParser.parse(result.text, keys.toSet())
+            if (parse !is RankingParse.Valid) return CompareResult.Failed("The answer could not be used.")
+            val fallback = local.suggestions.value
+            val entries = RankingMerge.merge(parse.entries, keys, fallback.map { it.contact.id }, fallback.associate { it.contact.id to it.reason }, at)
+            exchanges.save(LlmExchange(RankingPrompt.PURPOSE, at, "Compare: ranked ${parse.entries.size} of ${keys.size} contacts (not saved)", result.requestBody, result.responseBody, parse.issues))
+            return CompareResult.Ranked(entries.map { it.contactKey }, entries.associate { it.contactKey to it.reason })
+        } finally {
+            gate.reset()
+        }
+    }
+
     private suspend fun runOnce(trigger: RefreshTrigger): RefreshOutcome {
         // New instructions are classified first, so a new hard rule is a typed rule before the ranking runs.
         classifier?.classifyPending()

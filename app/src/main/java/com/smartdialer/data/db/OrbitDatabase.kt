@@ -14,8 +14,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         RankingCacheEntity::class,
         LlmExchangeEntity::class,
         WhatsAppEventEntity::class,
+        CompiledEffectEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = true,
 )
 abstract class OrbitDatabase : RoomDatabase() {
@@ -24,11 +25,12 @@ abstract class OrbitDatabase : RoomDatabase() {
     abstract fun rankingCacheDao(): RankingCacheDao
     abstract fun llmExchangeDao(): LlmExchangeDao
     abstract fun whatsAppEventDao(): WhatsAppEventDao
+    abstract fun compiledEffectDao(): CompiledEffectDao
 
     companion object {
         fun create(context: Context): OrbitDatabase =
             Room.databaseBuilder(context, OrbitDatabase::class.java, "orbit.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                 .build()
 
         /** Adds the optional contact a free-text rule is about. Existing rules stay general (null). */
@@ -70,6 +72,17 @@ abstract class OrbitDatabase : RoomDatabase() {
                         "contactKey TEXT NOT NULL, at INTEGER NOT NULL, outgoing INTEGER NOT NULL)",
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_whatsapp_events_at ON whatsapp_events (at)")
+            }
+        }
+
+        /** Effects compiled from instructions for the local scoring engine. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS compiled_effects (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "sourceRuleId INTEGER NOT NULL, paramsJson TEXT NOT NULL, enabled INTEGER NOT NULL, createdAt INTEGER NOT NULL)",
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_compiled_effects_sourceRuleId ON compiled_effects (sourceRuleId)")
             }
         }
     }

@@ -23,7 +23,10 @@ object InstructionLimits {
 
     /** Instructions that may be sent to the ranking model: classified as soft (or waiting for review), not off-topic. */
     fun eligible(rules: List<FreeTextRule>): List<FreeTextRule> =
-        rules.filter { it.status == FreeTextStatus.SOFT || it.status == FreeTextStatus.NEEDS_REVIEW }
+        rules.filter {
+            it.status == FreeTextStatus.SOFT || it.status == FreeTextStatus.NEEDS_REVIEW ||
+                it.status == FreeTextStatus.COMPILED || it.status == FreeTextStatus.UNSUPPORTED
+        }
 
     /** The most recent [MAX_PER_REQUEST] eligible instructions, oldest first. */
     fun selectForRanking(rules: List<FreeTextRule>): List<FreeTextRule> =

@@ -37,6 +37,10 @@ import com.smartdialer.BuildConfig
 import com.smartdialer.OrbitApplication
 import com.smartdialer.data.hasNotificationAccess
 import com.smartdialer.ui.settings.AiDisclosureDialog
+import com.smartdialer.ui.settings.CompareScreen
+import com.smartdialer.ui.settings.CompareViewModel
+import com.smartdialer.ui.settings.TuningScreen
+import com.smartdialer.ui.settings.TuningViewModel
 import kotlinx.coroutines.flow.map
 import com.smartdialer.ui.settings.WhatsAppPrompt
 import com.smartdialer.ui.settings.LlmInspectorScreen
@@ -55,7 +59,7 @@ import com.smartdialer.ui.rules.RulesScreen
 import com.smartdialer.ui.rules.RulesViewModel
 import com.smartdialer.ui.theme.Orbit
 
-private enum class Screen { Home, Rules, Details, Settings, Inspector }
+private enum class Screen { Home, Rules, Details, Settings, Inspector, Compare, Tuning }
 
 private val REQUIRED_PERMISSIONS = arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_CALL_LOG)
 
@@ -78,6 +82,8 @@ fun OrbitApp() {
                     uiSettings = container.uiSettings,
                     ai = container.aiSuggestions,
                     manualArrangement = container.manualArrangement,
+                    engine = container.engineSettings,
+                    localRanking = container.localRanking,
                 )
             }
         },
@@ -95,9 +101,16 @@ fun OrbitApp() {
                     whatsAppSettings = container.whatsAppSettings,
                     whatsAppStore = container.whatsAppStore,
                     uiSettings = container.uiSettings,
+                    engine = container.engineSettings,
                 )
             }
         },
+    )
+    val compareViewModel: CompareViewModel = viewModel(
+        factory = viewModelFactory { initializer { CompareViewModel(container.localRanking, container.rankingService) } },
+    )
+    val tuningViewModel: TuningViewModel = viewModel(
+        factory = viewModelFactory { initializer { TuningViewModel(container.engineSettings, container.localRanking) } },
     )
     val rulesViewModel: RulesViewModel = viewModel(
         factory = viewModelFactory {
@@ -109,7 +122,9 @@ fun OrbitApp() {
 
     var screen by rememberSaveable { mutableStateOf(Screen.Home) }
     var detailsKey by rememberSaveable { mutableStateOf<String?>(null) }
-    BackHandler(enabled = screen != Screen.Home) { screen = if (screen == Screen.Inspector) Screen.Settings else Screen.Home }
+    BackHandler(enabled = screen != Screen.Home) {
+        screen = if (screen == Screen.Inspector || screen == Screen.Compare || screen == Screen.Tuning) Screen.Settings else Screen.Home
+    }
 
     val contactActions = rememberContactActions()
 
@@ -210,11 +225,28 @@ fun OrbitApp() {
                     onRefreshNow = settingsViewModel::refreshNow,
                     onOpenInspector = { screen = Screen.Inspector },
                     onSetLayout = settingsViewModel::setLayoutMode,
+                    onSetEngine = settingsViewModel::setEngineMode,
+                    onOpenCompare = { screen = Screen.Compare },
+                    onOpenTuning = { screen = Screen.Tuning },
                     onSetWhatsApp = settingsViewModel::setWhatsAppEnabled,
                     onOpenNotificationAccess = { openNotificationAccess() },
                     onDeleteWhatsApp = settingsViewModel::deleteWhatsAppData,
                     onBack = { screen = Screen.Home },
                 ),
+            )
+        }
+        Screen.Compare -> {
+            val state by compareViewModel.state.collectAsStateWithLifecycle()
+            CompareScreen(state = state, onRunAi = compareViewModel::runAi, onBack = { screen = Screen.Settings })
+        }
+        Screen.Tuning -> {
+            val state by tuningViewModel.state.collectAsStateWithLifecycle()
+            TuningScreen(
+                state = state,
+                onWeight = tuningViewModel::setWeight,
+                onChange = tuningViewModel::update,
+                onReset = tuningViewModel::reset,
+                onBack = { screen = Screen.Settings },
             )
         }
         Screen.Inspector -> {
@@ -237,6 +269,7 @@ fun OrbitApp() {
                                 container.suggestionsRepository,
                                 container.whatsAppEvents,
                                 container.suggestionPipeline.result.map { it.suggestions },
+                                container.localRanking,
                             )
                         }
                     },
@@ -272,6 +305,9 @@ fun OrbitApp() {
                     makeHard = rulesViewModel::makeHard,
                     makeSoft = rulesViewModel::makeSoft,
                     keepSoft = rulesViewModel::keepSoft,
+                    setEffectEnabled = rulesViewModel::setEffectEnabled,
+                    deleteEffect = rulesViewModel::deleteEffect,
+                    recompile = rulesViewModel::recompile,
                     onBack = { screen = Screen.Home },
                 ),
             )

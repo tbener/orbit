@@ -2,6 +2,7 @@ package com.smartdialer.ui.rules
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,6 +13,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -57,6 +60,10 @@ class RulesActions(
     val makeSoft: (freeTextId: Long, typedRuleId: Long) -> Unit,
     /** Keeps a rule that needed review as a soft instruction. */
     val keepSoft: (freeTextId: Long) -> Unit,
+    val setEffectEnabled: (effectId: Long, enabled: Boolean) -> Unit,
+    val deleteEffect: (effectId: Long) -> Unit,
+    /** Compile the instruction again. */
+    val recompile: (freeTextId: Long) -> Unit,
     val onBack: () -> Unit,
 )
 
@@ -184,7 +191,18 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                                             fontWeight = FontWeight.SemiBold,
                                         )
                                     }
+                                    state.effects.filter { it.sourceRuleId == rule.id }.forEach { effect ->
+                                        EffectLine(
+                                            text = com.smartdialer.ranking.EffectText.describe(effect.params) { namesByKey?.get(it) ?: "a contact" },
+                                            enabled = effect.enabled,
+                                            onToggle = { actions.setEffectEnabled(effect.id, it) },
+                                            onDelete = { actions.deleteEffect(effect.id) },
+                                        )
+                                    }
                                     FlowRow(horizontalArrangement = Arrangement.spacedBy(Orbit.spacing.xs)) {
+                                        if (rule.status != FreeTextStatus.CONVERTED_TO_TYPED) {
+                                            RuleActionButton("Recompile", RuleKind.Soft) { actions.recompile(rule.id) }
+                                        }
                                         when (rule.status) {
                                             FreeTextStatus.CONVERTED_TO_TYPED ->
                                                 rule.typedRuleId?.let { typedId ->
@@ -195,7 +213,7 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
                                                 RuleActionButton("Keep soft", RuleKind.Soft) { actions.keepSoft(rule.id) }
                                             }
                                             FreeTextStatus.REJECTED_OFF_TOPIC -> Unit
-                                            FreeTextStatus.SOFT, FreeTextStatus.UNCLASSIFIED ->
+                                            FreeTextStatus.COMPILED, FreeTextStatus.UNSUPPORTED, FreeTextStatus.SOFT, FreeTextStatus.UNCLASSIFIED ->
                                                 RuleActionButton("Make hard", RuleKind.Solid) { pending = Pending.MakeHard(rule) }
                                         }
                                     }
@@ -309,6 +327,32 @@ fun RulesScreen(state: RulesUiState, actions: RulesActions) {
             onDismiss = { pending = null },
             onConfirm = { actions.deleteTyped(action.rule.id); pending = null },
         )
+    }
+}
+
+/** One compiled effect in plain language, with a switch to disable it and a button to delete it. */
+@Composable
+private fun EffectLine(text: String, enabled: Boolean, onToggle: (Boolean) -> Unit, onDelete: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Text(
+            text = "\u2192 $text",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (enabled) Orbit.colors.softAccent else MaterialTheme.colorScheme.onSurfaceVariant,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f),
+        )
+        androidx.compose.material3.Switch(
+            checked = enabled,
+            onCheckedChange = onToggle,
+            modifier = Modifier.semantics { contentDescription = "Effect: $text" },
+        )
+        androidx.compose.material3.IconButton(onClick = onDelete) {
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Filled.Delete,
+                contentDescription = "Delete effect: $text",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 

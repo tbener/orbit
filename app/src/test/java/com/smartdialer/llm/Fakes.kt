@@ -25,6 +25,24 @@ class FakeRules : RulesRepository {
     private var next = 1L
     override val freeTextRules: Flow<List<FreeTextRule>> = free.map { it.sortedByDescending { r -> r.id } }
     override val typedRules: Flow<List<TypedRule>> = typed
+    private val effectList = MutableStateFlow<List<com.smartdialer.ranking.CompiledEffect>>(emptyList())
+    override val effects: Flow<List<com.smartdialer.ranking.CompiledEffect>> = effectList
+
+    override suspend fun addEffects(ruleId: Long, params: List<com.smartdialer.ranking.EffectParams>) {
+        params.forEach { effectList.value += com.smartdialer.ranking.CompiledEffect(next++, ruleId, it) }
+    }
+
+    override suspend fun setEffectEnabled(id: Long, enabled: Boolean) {
+        effectList.value = effectList.value.map { if (it.id == id) it.copy(enabled = enabled) else it }
+    }
+
+    override suspend fun deleteEffect(id: Long) {
+        effectList.value = effectList.value.filter { it.id != id }
+    }
+
+    override suspend fun clearEffects(ruleId: Long) {
+        effectList.value = effectList.value.filter { it.sourceRuleId != ruleId }
+    }
 
     override suspend fun addFreeTextRule(text: String, contactKey: String?): Long {
         val id = next++

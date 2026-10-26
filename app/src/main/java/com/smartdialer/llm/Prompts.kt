@@ -7,10 +7,10 @@ package com.smartdialer.llm
  */
 object Prompts {
     const val RANKING_VERSION = "ranking-v4"
-    const val CLASSIFICATION_VERSION = "classification-v2"
+    const val CLASSIFICATION_VERSION = "compile-v1"
 
     val ranking: String by lazy { load("prompts/ranking_v4.txt") }
-    val classification: String by lazy { load("prompts/classification_v2.txt") }
+    val classification: String by lazy { load("prompts/compile_v1.txt") }
 
     private fun load(path: String): String {
         val stream = Prompts::class.java.classLoader?.getResourceAsStream(path)

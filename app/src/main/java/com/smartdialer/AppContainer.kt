@@ -60,7 +60,7 @@ class AppContainer(context: Context) {
     val llmExchanges: LlmExchangeStore = RoomLlmExchangeStore(database)
     private val llmClient: LlmClient = AnthropicLlmClient(BuildConfig.LLM_API_KEY)
 
-    private val classifier = RuleClassifier(llmClient, aiSettings, rulesRepository, contactsRepository, llmExchanges)
+    val classifier = RuleClassifier(llmClient, aiSettings, rulesRepository, contactsRepository, llmExchanges)
     val rankingService = RankingService(
         llm = llmClient,
         settings = aiSettings,
@@ -75,13 +75,18 @@ class AppContainer(context: Context) {
         onRankingUpdated = { manualArrangement.clear() },
     )
 
-    /** The ranking source for the home screen: cached LLM ranking when on, the fallback ranker otherwise. */
-    val aiSuggestions = AiSuggestionsRepository(deviceSuggestions, rankingCache, aiSettings, contactsRepository, rankingService, scope)
+    val engineSettings = com.smartdialer.data.EngineSettings(context)
+    val localRanking = com.smartdialer.data.LocalRanking(deviceSuggestions, contactsRepository, rulesRepository, engineSettings, whatsAppEvents, scope)
+
+    /** The ranking source for the home screen: the local engine by default, or the cached LLM ranking in AI mode. */
+    val aiSuggestions = AiSuggestionsRepository(
+        deviceSuggestions, rankingCache, aiSettings, contactsRepository, rankingService, scope, localRanking, engineSettings,
+    )
     val suggestionsRepository: SuggestionsRepository = aiSuggestions
     val suggestionPipeline = SuggestionPipeline(suggestionsRepository, rulesRepository, contactsRepository, scope, manualArrangement)
 
     init {
-        AiAutoRefresh(scope, rulesRepository, aiSettings, rankingService)
+        AiAutoRefresh(scope, rulesRepository, aiSettings, rankingService, classifier, engineSettings, localRanking)
         scope.launch { whatsAppStore.pruneOld(System.currentTimeMillis()) }
     }
 }

@@ -68,6 +68,8 @@ internal fun FreeTextStatus.label(): String = when (this) {
     FreeTextStatus.CONVERTED_TO_TYPED -> "Hard rule"
     FreeTextStatus.NEEDS_REVIEW -> "Needs your review"
     FreeTextStatus.REJECTED_OFF_TOPIC -> "Ignored (off-topic)"
+    FreeTextStatus.COMPILED -> "Compiled into effects"
+    FreeTextStatus.UNSUPPORTED -> "Kept as a note (AI ranking only)"
 }
 
 internal fun TypedRuleParams.describe(name: String): String = when (this) {

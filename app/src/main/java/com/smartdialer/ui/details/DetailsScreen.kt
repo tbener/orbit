@@ -1,5 +1,6 @@
 package com.smartdialer.ui.details
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -196,6 +197,28 @@ fun DetailsScreen(
                             onEdit = { pending = Pending.EditInstruction(rule) },
                             onDelete = { pending = Pending.DeleteInstruction(rule) },
                         )
+                    }
+
+                    state.scored?.let { scored ->
+                        item(key = "breakdown") {
+                            GlassPanel {
+                                var open by remember { mutableStateOf(false) }
+                                Text(
+                                    text = (if (open) "\u25BE " else "\u25B8 ") + "Score breakdown (advanced)",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Orbit.colors.accent,
+                                    modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button) { open = !open },
+                                )
+                                if (open) {
+                                    com.smartdialer.ui.settings.BreakdownLines(scored)
+                                    Text(
+                                        "Final slot: ${state.currentSlot ?: "not shown"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     item(key = "typed-header") {

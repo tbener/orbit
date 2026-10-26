@@ -1,6 +1,9 @@
 package com.smartdialer.llm
 
 import com.smartdialer.data.Contact
+import com.smartdialer.ranking.EffectParams
+import com.smartdialer.ranking.EffectValidator
+import com.smartdialer.ranking.RawEffect
 import com.smartdialer.rules.ContactRef
 import com.smartdialer.rules.FreeTextRule
 import com.smartdialer.rules.TypedRuleParams
@@ -17,24 +20,28 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import java.util.Locale
 
-/** An instruction waiting to be classified. [aboutName] is the contact it was written for, if any. */
+/** An instruction waiting to be compiled. [aboutName] is the contact it was written for, if any. */
 class RuleToClassify(val id: Long, val text: String, val aboutName: String?)
 
 enum class ModelAction { PIN_TO_SLOT, NEVER_SHOW, NONE }
 
+/** What the model decided for one instruction. */
+enum class ModelKind { HARD, COMPILED, NOT_RANKING_RELATED, UNSUPPORTED, SOFT }
+
 /** What the model said about one rule, before the code decides what to do with it. */
 class ModelClassification(
     val ruleId: Long,
-    val hard: Boolean,
-    val offTopic: Boolean,
+    val kind: ModelKind,
     val action: ModelAction,
     val slot: Int,
     val personName: String,
     val explanation: String,
+    val effects: List<RawEffect> = emptyList(),
 )
 
 /**
- * The classification request. **Privacy:** only the instruction text and, for a per-contact instruction, that
+ * The instruction-compiler request: one call classifies an instruction and, when it is a preference, compiles it into
+ * effects for the local scoring engine. **Privacy:** only the instruction text and, for a per-contact instruction, that
  * contact's display name are sent. No contact list, numbers or call data.
  */
 object ClassificationPrompt {
@@ -69,50 +76,65 @@ object ClassificationPrompt {
         },
     )
 
-    private fun stringType() = buildJsonObject { put("type", "string") }
+    private fun prop(type: String) = buildJsonObject { put("type", type) }
     private fun enumOf(vararg values: String) = buildJsonObject {
         put("type", "string")
         put("enum", JsonArray(values.map(::JsonPrimitive)))
     }
 
-    val schema: JsonObject = buildJsonObject {
+    private fun strings() = buildJsonObject {
+        put("type", "array")
+        put("items", prop("string"))
+    }
+
+    private fun obj(props: Map<String, JsonObject>) = buildJsonObject {
         put("type", "object")
-        put(
-            "properties",
-            buildJsonObject {
-                put(
-                    "classifications",
-                    buildJsonObject {
-                        put("type", "array")
-                        put(
-                            "items",
-                            buildJsonObject {
-                                put("type", "object")
-                                put(
-                                    "properties",
-                                    buildJsonObject {
-                                        put("ruleId", buildJsonObject { put("type", "integer") })
-                                        put("kind", enumOf("HARD", "SOFT", "NOT_RANKING_RELATED"))
-                                        put("action", enumOf("PIN_TO_SLOT", "NEVER_SHOW", "NONE"))
-                                        put("slot", buildJsonObject { put("type", "integer") })
-                                        put("personName", stringType())
-                                        put("explanation", stringType())
-                                    },
-                                )
-                                put(
-                                    "required",
-                                    JsonArray(listOf("ruleId", "kind", "action", "slot", "personName", "explanation").map(::JsonPrimitive)),
-                                )
-                                put("additionalProperties", false)
-                            },
-                        )
-                    },
-                )
-            },
-        )
-        put("required", JsonArray(listOf(JsonPrimitive("classifications"))))
+        put("properties", JsonObject(props))
+        put("required", JsonArray(props.keys.map(::JsonPrimitive)))
         put("additionalProperties", false)
     }
+
+    private val effectSchema = obj(
+        linkedMapOf(
+            "type" to enumOf("GLOBAL_WEIGHT", "CONTACT_BOOST", "CADENCE", "TIME_WINDOW"),
+            "feature" to prop("string"),
+            "multiplier" to prop("number"),
+            "personName" to prop("string"),
+            "delta" to prop("number"),
+            "everyDays" to prop("integer"),
+            "strength" to prop("number"),
+            "weekday" to prop("string"),
+            "part" to prop("string"),
+            "weekdays" to strings(),
+            "parts" to strings(),
+            "boost" to prop("number"),
+        ),
+    )
+
+    val schema: JsonObject = obj(
+        linkedMapOf(
+            "classifications" to buildJsonObject {
+                put("type", "array")
+                put(
+                    "items",
+                    obj(
+                        linkedMapOf(
+                            "ruleId" to prop("integer"),
+                            "kind" to enumOf("HARD", "COMPILED", "NOT_RANKING_RELATED", "UNSUPPORTED"),
+                            "action" to enumOf("PIN_TO_SLOT", "NEVER_SHOW", "NONE"),
+                            "slot" to prop("integer"),
+                            "personName" to prop("string"),
+                            "explanation" to prop("string"),
+                            "effects" to buildJsonObject {
+                                put("type", "array")
+                                put("items", effectSchema)
+                            },
+                        ),
+                    ),
+                )
+            },
+        ),
+    )
 }
 
 sealed interface ClassificationParse {
@@ -140,24 +162,21 @@ object ClassificationParser {
                 id !in validIds -> issues += "Entry ${index + 1}: unknown ruleId $id, dropped."
                 !seen.add(id) -> issues += "Entry ${index + 1}: duplicate ruleId $id, dropped."
                 else -> {
-                    val kind = (item["kind"] as? JsonPrimitive)?.contentOrNull?.trim()
-                    val action = ModelAction.entries.firstOrNull {
-                        it.name.equals((item["action"] as? JsonPrimitive)?.contentOrNull?.trim(), ignoreCase = true)
-                    }
-                    val kinds = listOf("HARD", "SOFT", "NOT_RANKING_RELATED")
-                    if (kind == null || kinds.none { kind.equals(it, true) } || action == null) {
+                    val kind = ModelKind.entries.firstOrNull { it.name.equals(str(item, "kind").trim(), ignoreCase = true) }
+                    val action = ModelAction.entries.firstOrNull { it.name.equals(str(item, "action").trim(), ignoreCase = true) }
+                    if (kind == null || action == null) {
                         seen.remove(id)
                         issues += "Entry ${index + 1} (rule $id): kind or action is not valid, dropped."
                     } else {
                         items += ModelClassification(
                             ruleId = id,
-                            hard = kind.equals("HARD", true),
-                            offTopic = kind.equals("NOT_RANKING_RELATED", true),
+                            kind = kind,
                             action = action,
                             slot = (item["slot"] as? JsonPrimitive)?.doubleOrNull?.toInt() ?: 0,
-                            personName = ((item["personName"] as? JsonPrimitive)?.contentOrNull).orEmpty().trim(),
-                            explanation = ((item["explanation"] as? JsonPrimitive)?.contentOrNull).orEmpty().trim().replace(Regex("\\s+"), " "),
-                        ).let { it }
+                            personName = str(item, "personName").trim(),
+                            explanation = str(item, "explanation").trim().replace(Regex("\\s+"), " "),
+                            effects = (item["effects"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.let(::rawEffect) },
+                        )
                     }
                 }
             }
@@ -166,11 +185,30 @@ object ClassificationParser {
         if (missing.isNotEmpty()) issues += "No usable answer for rule(s) ${missing.sorted().joinToString()}; they stay unclassified."
         return ClassificationParse.Valid(items, issues)
     }
+
+    private fun str(o: JsonObject, key: String) = ((o[key] as? JsonPrimitive)?.contentOrNull).orEmpty()
+    private fun num(o: JsonObject, key: String, default: Double) = (o[key] as? JsonPrimitive)?.doubleOrNull ?: default
+    private fun strings(o: JsonObject, key: String) = (o[key] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+
+    private fun rawEffect(o: JsonObject) = RawEffect(
+        type = str(o, "type"),
+        feature = str(o, "feature"),
+        multiplier = num(o, "multiplier", 1.0),
+        personName = str(o, "personName").trim(),
+        delta = num(o, "delta", 0.0),
+        everyDays = num(o, "everyDays", 0.0).toInt(),
+        strength = num(o, "strength", 1.0),
+        weekday = str(o, "weekday"),
+        part = str(o, "part"),
+        weekdays = strings(o, "weekdays"),
+        parts = strings(o, "parts"),
+        boost = num(o, "boost", 0.0),
+    )
 }
 
 /** What to do with one classified rule. */
 sealed interface ClassificationDecision {
-    /** Nothing to do with who to call: kept and shown, never sent to ranking. */
+    /** Nothing to do with who to call: kept and shown, never used. */
     data object OffTopic : ClassificationDecision
 
     class Soft(val explanation: String) : ClassificationDecision
@@ -178,8 +216,14 @@ sealed interface ClassificationDecision {
     /** Create this typed rule and mark the free-text rule as converted. */
     class Hard(val params: TypedRuleParams, val explanation: String) : ClassificationDecision
 
-    /** It looks like a hard rule, but the target is unclear; the user picks. Never guessed. */
-    class NeedsReview(val explanation: String, val proposedType: TypedRuleType, val proposedSlot: Int?) : ClassificationDecision
+    /** It looks like a hard rule, or needs a contact, but the target is unclear; the user picks. Never guessed. */
+    class NeedsReview(val explanation: String, val proposedType: TypedRuleType?, val proposedSlot: Int?) : ClassificationDecision
+
+    /** The instruction became these validated effects. [dropped] says why other proposed effects were left out. */
+    class Compiled(val effects: List<EffectParams>, val explanation: String, val dropped: List<String>) : ClassificationDecision
+
+    /** It cannot be expressed as an effect; kept as a note for the AI ranking mode. */
+    class Unsupported(val explanation: String) : ClassificationDecision
 }
 
 sealed interface NameMatch {
@@ -192,12 +236,47 @@ sealed interface NameMatch {
 object ClassificationResolver {
 
     fun resolve(rule: FreeTextRule, model: ModelClassification, contacts: List<Contact>, maxSlot: Int): ClassificationDecision {
-        if (model.offTopic) return ClassificationDecision.OffTopic
+        if (model.kind == ModelKind.NOT_RANKING_RELATED) return ClassificationDecision.OffTopic
         val modelExplanation = Sanitizer.cleanReason(model.explanation, 200).orEmpty()
-        if (!model.hard || model.action == ModelAction.NONE) {
-            return ClassificationDecision.Soft(
-                modelExplanation.ifBlank { "Soft: this guides the ranking but is not guaranteed." },
+        return when (model.kind) {
+            ModelKind.SOFT -> ClassificationDecision.Soft(modelExplanation.ifBlank { "Soft: this guides the ranking but is not guaranteed." })
+            ModelKind.UNSUPPORTED ->
+                ClassificationDecision.Unsupported(modelExplanation.ifBlank { "This can't be turned into a ranking effect, so it is kept as a note." })
+            ModelKind.COMPILED -> compile(rule, model, contacts, modelExplanation)
+            else -> hard(rule, model, contacts, maxSlot, modelExplanation)
+        }
+    }
+
+    private fun compile(rule: FreeTextRule, model: ModelClassification, contacts: List<Contact>, explanation: String): ClassificationDecision {
+        val known = contacts.map { it.id }.toSet()
+        // A per-contact instruction is about that contact; a general one names people, resolved by name (never guessed).
+        val keyOf = { name: String ->
+            if (rule.contactKey != null) rule.contactKey else (findByName(name, contacts) as? NameMatch.Found)?.contact?.id
+        }
+        val effects = ArrayList<EffectParams>()
+        val dropped = ArrayList<String>()
+        var unresolvedContact = false
+        model.effects.forEach { raw ->
+            val v = EffectValidator.validate(raw, keyOf, known)
+            if (v.params != null) effects += v.params else {
+                dropped += v.issue.orEmpty()
+                if (v.issue?.startsWith("no contact") == true || v.issue == "unknown contact") unresolvedContact = true
+            }
+        }
+        return when {
+            effects.isNotEmpty() -> ClassificationDecision.Compiled(effects, explanation.ifBlank { "Compiled into ranking effects." }, dropped)
+            unresolvedContact -> ClassificationDecision.NeedsReview(
+                "I could not tell which contact this is about (${dropped.firstOrNull().orEmpty()}). Edit the instruction to name them.",
+                null,
+                null,
             )
+            else -> ClassificationDecision.Unsupported(explanation.ifBlank { "This can't be turned into a ranking effect, so it is kept as a note." })
+        }
+    }
+
+    private fun hard(rule: FreeTextRule, model: ModelClassification, contacts: List<Contact>, maxSlot: Int, modelExplanation: String): ClassificationDecision {
+        if (model.action == ModelAction.NONE) {
+            return ClassificationDecision.Unsupported(modelExplanation.ifBlank { "This can't be turned into a ranking effect, so it is kept as a note." })
         }
         val type = if (model.action == ModelAction.PIN_TO_SLOT) TypedRuleType.PIN_TO_SLOT else TypedRuleType.NEVER_SHOW
         val slot = model.slot.takeIf { type == TypedRuleType.PIN_TO_SLOT }
@@ -224,9 +303,7 @@ object ClassificationResolver {
             }
         }
 
-        if (type == TypedRuleType.PIN_TO_SLOT && (slot == null || slot !in 1..maxSlot)) {
-            return review("the slot is not clear.")
-        }
+        if (type == TypedRuleType.PIN_TO_SLOT && (slot == null || slot !in 1..maxSlot)) return review("the slot is not clear.")
         val params: TypedRuleParams = when (type) {
             TypedRuleType.PIN_TO_SLOT -> TypedRuleParams.PinToSlot(ContactRef(contact.id, contact.name), slot!!)
             TypedRuleType.NEVER_SHOW -> TypedRuleParams.NeverShow(ContactRef(contact.id, contact.name))

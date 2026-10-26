@@ -36,6 +36,8 @@ data class DetailsUiState(
     val typedRules: List<TypedRule> = emptyList(),
     /** The slot (1 = top) this contact has in the list right now, if they are in it. */
     val currentSlot: Int? = null,
+    /** What the local engine computed for this contact: features, weights, contributions, applied effects. */
+    val scored: com.smartdialer.ranking.ScoredContact? = null,
 ) {
     val displayName: String get() = contact?.name ?: fallbackName
 }
@@ -47,6 +49,7 @@ class DetailsViewModel(
     suggestions: SuggestionsRepository,
     whatsAppEvents: Flow<List<WhatsAppEvent>>,
     currentList: Flow<List<com.smartdialer.data.Suggestion>>,
+    localRanking: com.smartdialer.data.LocalRanking,
 ) : ViewModel() {
 
     private val _messages = Channel<UserMessage>(Channel.BUFFERED)
@@ -59,8 +62,8 @@ class DetailsViewModel(
         combine(suggestions.activity, whatsAppEvents) { activity, events ->
             WhatsAppSignals.merge(activity, events, System.currentTimeMillis())
         },
-        currentList,
-    ) { freeText, typed, deviceContacts, activity, list ->
+        combine(currentList, localRanking.state) { list, local -> list to local },
+    ) { freeText, typed, deviceContacts, activity, (list, local) ->
         val mine = typed.filter { it.params.contact.lookupKey == contactKey }
         DetailsUiState(
             contactKey = contactKey,
@@ -70,6 +73,7 @@ class DetailsViewModel(
             signals = activity[contactKey]?.signals,
             instructions = freeText.filter { it.contactKey == contactKey },
             typedRules = mine,
+            scored = local?.ranked?.firstOrNull { it.contactKey == contactKey },
             currentSlot = list.indexOfFirst { it.contact.id == contactKey }.takeIf { it >= 0 }?.plus(1),
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DetailsUiState(contactKey))
